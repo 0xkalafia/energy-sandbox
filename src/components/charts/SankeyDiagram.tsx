@@ -268,7 +268,7 @@ function SankeyNode(props: {
         textAnchor={isRight ? "end" : "start"}
         dominantBaseline="middle"
         className="tabular"
-        fill="oklch(0.96 0.005 270)"
+        fill="var(--color-fg)"
         fontSize={11}
         fontWeight={500}
       >
@@ -280,7 +280,7 @@ function SankeyNode(props: {
         textAnchor={isRight ? "end" : "start"}
         dominantBaseline="middle"
         className="tabular"
-        fill="oklch(0.5 0.01 270)"
+        fill="var(--color-fg-subtle)"
         fontSize={9}
       >
         {payload.value.toFixed(1)} GWh

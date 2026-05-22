@@ -43,6 +43,7 @@ export function TabsTrigger({
         "data-[state=active]:shadow-sm",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-emerald-glow)]/40",
       )}
+      aria-label={typeof children === "string" ? `Switch to ${children} tab` : undefined}
     >
       {children}
     </TabsPrimitive.Trigger>

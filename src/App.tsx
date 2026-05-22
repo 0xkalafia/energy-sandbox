@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { KPIGrid } from "@/components/KPIGrid";
 import { HourlyChart } from "@/components/charts/HourlyChart";
@@ -11,10 +11,34 @@ import { fmtBaht, fmtEnergy } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Menu, Link as LinkIcon, Check } from "lucide-react";
 import { decodeInputsFromHash, encodeInputsToHash } from "@/lib/urlHash";
-import { CarbonWaterfall } from "@/components/charts/CarbonWaterfall";
-import { SankeyDiagram } from "@/components/charts/SankeyDiagram";
-import { ResilienceView } from "@/components/charts/ResilienceView";
-import { MultiYearCashflow } from "@/components/charts/MultiYearCashflow";
+import { ChartSkeleton } from "@/components/ui/ChartSkeleton";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Toaster, toast } from "sonner";
+import { useTheme } from "@/lib/theme";
+import { CommandPalette } from "@/components/CommandPalette";
+import { useKeyboardShortcuts } from "@/lib/useKeyboardShortcuts";
+
+// Heavy tab content — lazy load so initial bundle stays lean
+const SankeyDiagram = lazy(() =>
+  import("@/components/charts/SankeyDiagram").then((m) => ({
+    default: m.SankeyDiagram,
+  })),
+);
+const ResilienceView = lazy(() =>
+  import("@/components/charts/ResilienceView").then((m) => ({
+    default: m.ResilienceView,
+  })),
+);
+const CarbonWaterfall = lazy(() =>
+  import("@/components/charts/CarbonWaterfall").then((m) => ({
+    default: m.CarbonWaterfall,
+  })),
+);
+const MultiYearCashflow = lazy(() =>
+  import("@/components/charts/MultiYearCashflow").then((m) => ({
+    default: m.MultiYearCashflow,
+  })),
+);
 
 export default function App() {
   // Hydrate inputs from URL hash on first render
@@ -24,6 +48,9 @@ export default function App() {
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const { effective: themeEffective, cycle: cycleTheme } = useTheme();
 
   // Debounced sync of inputs → URL hash (no history pollution)
   const hashTimer = useRef<number | null>(null);
@@ -46,19 +73,76 @@ export default function App() {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
+      toast.success("คัดลอกลิงก์เรียบร้อย", {
+        description: "วาง URL นี้ที่ไหนก็ได้เพื่อเปิด scenario เดียวกัน",
+      });
     } catch {
-      /* ignore */
+      toast.error("คัดลอกไม่ได้", {
+        description: "ลองคัดลอกจาก address bar เอง",
+      });
     }
   };
+
+  // Wrap setInputs so we can toast on preset changes
+  const setInputsWithToast = (next: typeof inputs) => {
+    setInputs(next);
+  };
+
+  // Global keyboard shortcuts
+  useKeyboardShortcuts({
+    onCommandK: () => setPaletteOpen((o) => !o),
+    onTab: (i) => {
+      const tabs = [
+        "overview",
+        "flow",
+        "hourly",
+        "battery",
+        "resilience",
+        "carbon",
+        "finance",
+      ];
+      if (tabs[i]) setActiveTab(tabs[i]);
+    },
+    onReset: () => {
+      setInputs(DEFAULT_INPUTS);
+      toast("รีเซ็ตค่ากลับเป็น default", { icon: "↺" });
+    },
+    onShare: () => {
+      copyLink();
+    },
+    onTheme: () => {
+      cycleTheme();
+    },
+  });
 
   const hourly = useMemo(() => simulateDay(inputs), [inputs]);
   const kpis = useMemo(() => computeKPIs(inputs, hourly), [inputs, hourly]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden text-[var(--color-fg)]">
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        inputs={inputs}
+        setInputs={setInputs}
+        setActiveTab={setActiveTab}
+      />
+      <Toaster
+        theme={themeEffective}
+        position="bottom-right"
+        toastOptions={{
+          className: "tabular",
+          style: {
+            background: "var(--color-bg-elevated)",
+            border: "1px solid var(--color-border)",
+            color: "var(--color-fg)",
+          },
+        }}
+      />
+
       {/* Desktop sidebar (lg and up) */}
       <div className="hidden lg:flex lg:h-full lg:w-[340px] lg:shrink-0">
-        <Sidebar inputs={inputs} setInputs={setInputs} />
+        <Sidebar inputs={inputs} setInputs={setInputsWithToast} />
       </div>
 
       {/* Mobile drawer */}
@@ -71,7 +155,7 @@ export default function App() {
           <div className="fixed inset-y-0 left-0 z-50 w-[88vw] max-w-[360px] lg:hidden">
             <Sidebar
               inputs={inputs}
-              setInputs={setInputs}
+              setInputs={setInputsWithToast}
               onClose={() => setDrawerOpen(false)}
             />
           </div>
@@ -87,8 +171,9 @@ export default function App() {
                 onClick={() => setDrawerOpen(true)}
                 className="mt-1 inline-flex items-center justify-center rounded-md border border-[var(--color-border)] p-2 text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)] lg:hidden"
                 title="Open controls"
+                aria-label="Open simulation controls"
               >
-                <Menu className="h-4 w-4" />
+                <Menu className="h-4 w-4" aria-hidden="true" />
               </button>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--color-fg-subtle)]">
@@ -105,9 +190,22 @@ export default function App() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
+                onClick={() => setPaletteOpen(true)}
+                className="hidden items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]/60 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-fg-muted)] backdrop-blur-md transition-all hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)] md:inline-flex"
+                title="Open command palette (⌘K)"
+                aria-label="Open command palette"
+              >
+                <span>Search…</span>
+                <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-bg-hover)] px-1 text-[9px]">
+                  ⌘K
+                </kbd>
+              </button>
+              <ThemeToggle />
+              <button
                 onClick={copyLink}
                 className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]/60 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-fg-muted)] backdrop-blur-md transition-all hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]"
                 title="Copy shareable link"
+                aria-label="Copy shareable scenario link"
               >
                 {copied ? (
                   <>
@@ -129,7 +227,7 @@ export default function App() {
           </div>
 
           {/* Tabs */}
-          <Tabs defaultValue="overview">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="flow">Flow</TabsTrigger>
@@ -160,7 +258,9 @@ export default function App() {
             </TabsContent>
 
             <TabsContent value="flow" className="mt-6 space-y-6">
-              <SankeyDiagram inputs={inputs} hourly={hourly} />
+              <Suspense fallback={<ChartSkeleton title="Energy flow…" height={480} />}>
+                <SankeyDiagram inputs={inputs} hourly={hourly} />
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="hourly" className="mt-6 space-y-6">
@@ -172,16 +272,28 @@ export default function App() {
             </TabsContent>
 
             <TabsContent value="resilience" className="mt-6 space-y-6">
-              <ResilienceView inputs={inputs} />
+              <Suspense
+                fallback={<ChartSkeleton title="Resilience scenario…" height={280} />}
+              >
+                <ResilienceView inputs={inputs} />
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="carbon" className="mt-6 space-y-6">
-              <CarbonWaterfall kpis={kpis} />
+              <Suspense
+                fallback={<ChartSkeleton title="Carbon balance…" height={300} />}
+              >
+                <CarbonWaterfall kpis={kpis} />
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="finance" className="mt-6 space-y-6">
               <KPIGrid kpis={kpis} />
-              <MultiYearCashflow kpis={kpis} />
+              <Suspense
+                fallback={<ChartSkeleton title="Multi-year cashflow…" height={340} />}
+              >
+                <MultiYearCashflow kpis={kpis} />
+              </Suspense>
               <FinanceBreakdown
                 carbonCreditRevenue={kpis.carbonCreditRevenue}
                 methanolRevenue={kpis.methanolRevenue}

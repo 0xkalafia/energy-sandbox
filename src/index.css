@@ -7,7 +7,8 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, "Liberation Mono", "Courier New", monospace;
 
-  /* Semantic colors */
+  /* Default (dark) — these become CSS custom properties Tailwind v4 picks up.
+     They are overridden by :root rules below depending on data-theme. */
   --color-bg: oklch(0.16 0.005 270);
   --color-bg-elevated: oklch(0.2 0.006 270);
   --color-bg-hover: oklch(0.24 0.008 270);
@@ -17,12 +18,49 @@
   --color-fg-muted: oklch(0.7 0.01 270);
   --color-fg-subtle: oklch(0.5 0.01 270);
 
-  /* Accent palette */
+  /* Accents stay similar in both themes — slightly more saturated in light */
   --color-emerald-glow: oklch(0.78 0.18 155);
   --color-amber-glow: oklch(0.83 0.17 75);
   --color-rose-glow: oklch(0.72 0.2 20);
   --color-sky-glow: oklch(0.78 0.14 235);
   --color-violet-glow: oklch(0.7 0.2 290);
+}
+
+/* ---------- Theme overrides ---------- */
+:root,
+:root[data-theme="dark"] {
+  --color-bg: oklch(0.16 0.005 270);
+  --color-bg-elevated: oklch(0.2 0.006 270);
+  --color-bg-hover: oklch(0.24 0.008 270);
+  --color-border: oklch(0.28 0.008 270);
+  --color-border-strong: oklch(0.36 0.01 270);
+  --color-fg: oklch(0.96 0.005 270);
+  --color-fg-muted: oklch(0.7 0.01 270);
+  --color-fg-subtle: oklch(0.5 0.01 270);
+
+  --bg-glow-1: oklch(0.22 0.05 280 / 0.4);
+  --bg-glow-2: oklch(0.22 0.05 200 / 0.3);
+}
+
+:root[data-theme="light"] {
+  --color-bg: oklch(0.985 0.003 270);
+  --color-bg-elevated: oklch(1 0 0);
+  --color-bg-hover: oklch(0.95 0.005 270);
+  --color-border: oklch(0.88 0.006 270);
+  --color-border-strong: oklch(0.78 0.008 270);
+  --color-fg: oklch(0.18 0.012 270);
+  --color-fg-muted: oklch(0.4 0.012 270);
+  --color-fg-subtle: oklch(0.55 0.01 270);
+
+  /* Slightly darker accents for contrast on light bg */
+  --color-emerald-glow: oklch(0.58 0.18 155);
+  --color-amber-glow: oklch(0.65 0.17 75);
+  --color-rose-glow: oklch(0.6 0.2 20);
+  --color-sky-glow: oklch(0.58 0.15 235);
+  --color-violet-glow: oklch(0.55 0.2 290);
+
+  --bg-glow-1: oklch(0.85 0.08 280 / 0.25);
+  --bg-glow-2: oklch(0.85 0.08 200 / 0.2);
 }
 
 @layer base {
@@ -35,12 +73,12 @@
     background:
       radial-gradient(
         1200px 600px at 0% -10%,
-        oklch(0.22 0.05 280 / 0.4),
+        var(--bg-glow-1),
         transparent 60%
       ),
       radial-gradient(
         900px 500px at 100% 0%,
-        oklch(0.22 0.05 200 / 0.3),
+        var(--bg-glow-2),
         transparent 60%
       ),
       var(--color-bg);
@@ -49,6 +87,7 @@
     font-feature-settings: "cv11", "ss01", "ss03";
     -webkit-font-smoothing: antialiased;
     margin: 0;
+    transition: background-color 200ms ease, color 200ms ease;
   }
   ::selection {
     background: oklch(0.78 0.18 155 / 0.25);
@@ -59,6 +98,58 @@
 /* Tabular numbers for KPI digits */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Shimmer for skeletons */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Tab content fade-slide on data-state change (Radix Tabs) */
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+[data-state="active"][role="tabpanel"] {
+  animation: tab-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Dialog/overlay fade — used by command palette later */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Focus ring — accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-emerald-glow);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* Subtle scrollbar */

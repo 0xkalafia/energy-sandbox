@@ -7,6 +7,7 @@ import { SEASONS } from "@/data/types";
 import { fmtPower } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { DEFAULT_INPUTS, PRESETS, type PresetId } from "@/data/constants";
+import { toast } from "sonner";
 import {
   RotateCcw,
   Zap,
@@ -53,9 +54,13 @@ export function Sidebar({ inputs, setInputs, onClose }: Props) {
           </div>
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setInputs(DEFAULT_INPUTS)}
+              onClick={() => {
+                setInputs(DEFAULT_INPUTS);
+                toast("รีเซ็ตค่ากลับเป็น default", { icon: "↺" });
+              }}
               className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]"
               title="Reset to defaults"
+              aria-label="Reset to defaults"
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
@@ -75,7 +80,12 @@ export function Sidebar({ inputs, setInputs, onClose }: Props) {
         <Section title="Preset scenario" icon={<Flame className="h-3.5 w-3.5" />}>
           <PresetSelector
             current={detectPreset(inputs)}
-            onSelect={(id) => setInputs(PRESETS[id].inputs)}
+            onSelect={(id) => {
+              setInputs(PRESETS[id].inputs);
+              toast.success(`โหลด preset: ${PRESETS[id].label}`, {
+                description: PRESETS[id].description,
+              });
+            }}
           />
         </Section>
 
