@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Area,
   Bar,
   Cell,
   CartesianGrid,
@@ -15,8 +16,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Field } from "@/components/ui/Field";
 import { Slider } from "@/components/ui/Slider";
+import { Switch } from "@/components/ui/Switch";
 import { fmtBaht, fmtPct } from "@/lib/utils";
-import type { KPIs } from "@/data/types";
+import type { KPIs, SimInputs } from "@/data/types";
 import {
   DEFAULT_MULTI_YEAR,
   projectMultiYear,
@@ -25,40 +27,61 @@ import {
 
 interface Props {
   kpis: KPIs;
+  inputs: SimInputs;
 }
 
-export function MultiYearCashflow({ kpis }: Props) {
+export function MultiYearCashflow({ kpis, inputs }: Props) {
   const [opts, setOpts] = useState<MultiYearOptions>(DEFAULT_MULTI_YEAR);
 
-  const projection = useMemo(() => projectMultiYear(kpis, opts), [kpis, opts]);
+  const projection = useMemo(
+    () => projectMultiYear(kpis, inputs, opts),
+    [kpis, inputs, opts],
+  );
 
   const update = <K extends keyof MultiYearOptions>(
     key: K,
     val: MultiYearOptions[K],
   ) => setOpts({ ...opts, [key]: val });
 
+  // Data points in ฿B for chart
   const data = projection.rows.map((r) => ({
     year: `Y${r.year}`,
-    Net: +(r.net / 1e9).toFixed(2), // billion baht
+    Net: +(r.net / 1e9).toFixed(2),
     Cumulative: +(r.cumulative / 1e9).toFixed(2),
+    CumulativeLow: +(r.cumulativeLow / 1e9).toFixed(2),
+    CumulativeHigh: +(r.cumulativeHigh / 1e9).toFixed(2),
+    // For Recharts to render a band, encode [low, high] as Area "range"
+    Band: [
+      +(r.cumulativeLow / 1e9).toFixed(2),
+      +(r.cumulativeHigh / 1e9).toFixed(2),
+    ] as [number, number],
+    Augmentation: +(r.augmentation / 1e9).toFixed(3),
   }));
+
+  // Final-year engineering snapshot
+  const last = projection.rows[projection.rows.length - 1];
 
   return (
     <div className="space-y-6">
-      {/* Assumptions controls */}
+      {/* Engineering assumptions */}
       <Card>
         <CardHeader>
-          <CardTitle>Projection assumptions</CardTitle>
-          <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
-            Adjust to see how growth and inflation reshape payback
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Engineering & financial assumptions</CardTitle>
+              <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
+                Battery degradation, EV adoption, carbon price drift
+              </p>
+            </div>
+            <Badge tone="violet">Phase 3</Badge>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             <Field
               label="Horizon"
               value={`${opts.years} ปี`}
-              hint="ปีที่ project ไปข้างหน้า"
+              hint="ระยะเวลา project"
             >
               <Slider
                 value={opts.years}
@@ -69,35 +92,74 @@ export function MultiYearCashflow({ kpis }: Props) {
               />
             </Field>
             <Field
-              label="Demand growth"
-              value={fmtPct(opts.demandGrowth)}
-              hint="โหลดเพิ่ม/ปี"
+              label="Battery degradation"
+              value={fmtPct(opts.batteryDegradation)}
+              hint="capacity loss/ปี"
             >
               <Slider
-                value={opts.demandGrowth * 100}
-                onChange={(v) => update("demandGrowth", v / 100)}
+                value={opts.batteryDegradation * 1000}
+                onChange={(v) => update("batteryDegradation", v / 1000)}
                 min={0}
-                max={5}
-                step={0.1}
+                max={40}
+                step={1}
               />
             </Field>
             <Field
               label="Carbon price ↑"
               value={fmtPct(opts.carbonPriceGrowth)}
-              hint="ราคาคาร์บอนเครดิตขึ้น/ปี"
+              hint="ราคา CO₂ ขึ้น/ปี"
             >
               <Slider
                 value={opts.carbonPriceGrowth * 100}
                 onChange={(v) => update("carbonPriceGrowth", v / 100)}
                 min={0}
-                max={10}
+                max={12}
                 step={0.1}
+              />
+            </Field>
+            <Field
+              label="Carbon ± uncertainty"
+              value={fmtPct(opts.carbonPriceUncertainty)}
+              hint="ความผันผวนถึงปลาย horizon"
+            >
+              <Slider
+                value={opts.carbonPriceUncertainty * 100}
+                onChange={(v) => update("carbonPriceUncertainty", v / 100)}
+                min={0}
+                max={80}
+                step={1}
+              />
+            </Field>
+            <Field
+              label="EV adoption ceiling"
+              value={fmtPct(opts.evAdoptionCeiling)}
+              hint="EV penetration สูงสุด"
+            >
+              <Slider
+                value={opts.evAdoptionCeiling * 100}
+                onChange={(v) => update("evAdoptionCeiling", v / 100)}
+                min={20}
+                max={100}
+                step={1}
+              />
+            </Field>
+            <Field
+              label="EV midpoint year"
+              value={`Y${opts.evAdoptionMidpoint}`}
+              hint="ปีที่ EV ถึงครึ่ง ceiling"
+            >
+              <Slider
+                value={opts.evAdoptionMidpoint}
+                onChange={(v) => update("evAdoptionMidpoint", v)}
+                min={1}
+                max={25}
+                step={1}
               />
             </Field>
             <Field
               label="OPEX inflation"
               value={fmtPct(opts.opexInflation)}
-              hint="ค่าบำรุง/ค่าจ้างเฟ้อ"
+              hint="ค่าบำรุง+ค่าจ้างเฟ้อ"
             >
               <Slider
                 value={opts.opexInflation * 100}
@@ -110,8 +172,7 @@ export function MultiYearCashflow({ kpis }: Props) {
             <Field
               label="Discount rate"
               value={fmtPct(opts.discountRate)}
-              hint="NPV discount (0 = ไม่ใช้)"
-              className="sm:col-span-2"
+              hint="0 = no discount"
             >
               <Slider
                 value={opts.discountRate * 100}
@@ -121,12 +182,26 @@ export function MultiYearCashflow({ kpis }: Props) {
                 step={0.25}
               />
             </Field>
+            <div className="flex items-end justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-hover)]/40 p-3">
+              <div>
+                <p className="text-xs font-medium text-[var(--color-fg)]">
+                  Battery augmentation
+                </p>
+                <p className="mt-0.5 text-[10px] text-[var(--color-fg-subtle)]">
+                  เติม cells ทุกปีให้รักษา rated capacity
+                </p>
+              </div>
+              <Switch
+                checked={opts.augmentationEnabled}
+                onChange={(v) => update("augmentationEnabled", v)}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Projection KPIs */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
         <Stat
           label="Payback year"
           value={
@@ -137,12 +212,12 @@ export function MultiYearCashflow({ kpis }: Props) {
           tone={projection.paybackYear ? "emerald" : "rose"}
         />
         <Stat
-          label={`Net after ${opts.years} ปี`}
+          label={`Net Y${opts.years}`}
           value={fmtBaht(projection.totalLifetimeNet)}
           tone={projection.totalLifetimeNet > 0 ? "emerald" : "rose"}
         />
         <Stat
-          label="IRR (approx)"
+          label="IRR"
           value={
             Number.isFinite(projection.irrApprox)
               ? fmtPct(projection.irrApprox)
@@ -150,38 +225,53 @@ export function MultiYearCashflow({ kpis }: Props) {
           }
           tone="violet"
         />
-        <Stat label="CAPEX" value={fmtBaht(kpis.capexEstimate)} tone="amber" />
+        <Stat
+          label="Augmentation (total)"
+          value={fmtBaht(projection.totalAugmentation)}
+          tone="amber"
+        />
+        <Stat
+          label={`EV @ Y${opts.years}`}
+          value={fmtPct(last?.evPenetration ?? 0)}
+          tone="sky"
+        />
       </div>
 
-      {/* Cashflow chart */}
+      {/* Cashflow chart with uncertainty band */}
       <Card>
         <CardHeader>
-          <CardTitle>Annual net & cumulative cashflow</CardTitle>
+          <CardTitle>Cashflow with carbon-price uncertainty</CardTitle>
           <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
-            Bars = yearly net · line = cumulative (starts at −CAPEX) · units: ฿B
+            Bars = yearly net · line = mid cumulative · band = low/high cumulative · units: ฿B
           </p>
         </CardHeader>
         <CardContent>
-          <div className="h-[340px] w-full">
+          <div className="h-[360px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
                 data={data}
                 margin={{ top: 16, right: 16, left: 0, bottom: 0 }}
               >
+                <defs>
+                  <linearGradient id="band-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="oklch(0.7 0.2 290)" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="oklch(0.7 0.2 290)" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="oklch(0.28 0.008 270)"
+                  stroke="var(--color-border)"
                   vertical={false}
                 />
                 <XAxis
                   dataKey="year"
-                  stroke="oklch(0.5 0.01 270)"
+                  stroke="var(--color-fg-subtle)"
                   tick={{ fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
-                  stroke="oklch(0.5 0.01 270)"
+                  stroke="var(--color-fg-subtle)"
                   tick={{ fontSize: 10 }}
                   tickLine={false}
                   axisLine={false}
@@ -189,8 +279,123 @@ export function MultiYearCashflow({ kpis }: Props) {
                 />
                 <ReferenceLine
                   y={0}
-                  stroke="oklch(0.36 0.01 270)"
+                  stroke="var(--color-border-strong)"
                   strokeWidth={1}
+                />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    const d = payload[0].payload as (typeof data)[number];
+                    return (
+                      <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
+                        <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
+                          {label}
+                        </p>
+                        <div className="tabular mt-1 space-y-0.5 text-[11px]">
+                          <Row label="Net" value={d.Net} color="oklch(0.78 0.18 155)" />
+                          <Row
+                            label="Cum (mid)"
+                            value={d.Cumulative}
+                            color="oklch(0.7 0.2 290)"
+                          />
+                          <Row
+                            label="Cum (low)"
+                            value={d.CumulativeLow}
+                            color="oklch(0.72 0.2 20)"
+                          />
+                          <Row
+                            label="Cum (high)"
+                            value={d.CumulativeHigh}
+                            color="oklch(0.78 0.14 235)"
+                          />
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+                {/* Uncertainty band — Area between low/high */}
+                <Area
+                  type="monotone"
+                  dataKey="Band"
+                  stroke="none"
+                  fill="url(#band-grad)"
+                  activeDot={false}
+                  legendType="none"
+                />
+                <Bar dataKey="Net" radius={[3, 3, 0, 0]}>
+                  {data.map((d, i) => (
+                    <Cell
+                      key={i}
+                      fill={
+                        d.Net >= 0
+                          ? "oklch(0.78 0.18 155)"
+                          : "oklch(0.72 0.2 20)"
+                      }
+                    />
+                  ))}
+                </Bar>
+                <Line
+                  type="monotone"
+                  dataKey="Cumulative"
+                  stroke="oklch(0.7 0.2 290)"
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* EV adoption + lifestyle growth */}
+      <Card>
+        <CardHeader>
+          <CardTitle>EV adoption & lifestyle load</CardTitle>
+          <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
+            S-curve adoption × load multiplier — drives demand growth over years
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[240px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={projection.rows.map((r) => ({
+                  year: `Y${r.year}`,
+                  EV: +(r.evPenetration * 100).toFixed(1),
+                  Lifestyle: +r.lifestyleGWhPerDay.toFixed(2),
+                  Battery: +r.batteryEffectiveGWh.toFixed(2),
+                }))}
+                margin={{ top: 10, right: 60, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-border)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="year"
+                  stroke="var(--color-fg-subtle)"
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  yAxisId="left"
+                  stroke="var(--color-fg-subtle)"
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  stroke="var(--color-fg-subtle)"
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `${v}`}
                 />
                 <Tooltip
                   content={({ active, payload, label }) => {
@@ -213,7 +418,7 @@ export function MultiYearCashflow({ kpis }: Props) {
                               {p.name}
                             </span>
                             <span className="tabular font-medium text-[var(--color-fg)]">
-                              ฿{(p.value as number).toFixed(2)}B
+                              {(p.value as number).toFixed(2)}
                             </span>
                           </div>
                         ))}
@@ -221,25 +426,33 @@ export function MultiYearCashflow({ kpis }: Props) {
                     );
                   }}
                 />
-                <Bar dataKey="Net" radius={[3, 3, 0, 0]}>
-                  {data.map((d, i) => (
-                    <Cell
-                      key={i}
-                      fill={
-                        d.Net >= 0
-                          ? "oklch(0.78 0.18 155)"
-                          : "oklch(0.72 0.2 20)"
-                      }
-                    />
-                  ))}
-                </Bar>
                 <Line
+                  yAxisId="left"
                   type="monotone"
-                  dataKey="Cumulative"
-                  stroke="oklch(0.7 0.2 290)"
-                  strokeWidth={2.5}
+                  dataKey="EV"
+                  stroke="oklch(0.78 0.14 235)"
+                  strokeWidth={2}
                   dot={false}
-                  activeDot={{ r: 4 }}
+                  name="EV %"
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="Lifestyle"
+                  stroke="oklch(0.78 0.18 155)"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Lifestyle GWh/day"
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="Battery"
+                  stroke="oklch(0.7 0.2 290)"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  dot={false}
+                  name="Battery effective GWh"
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -273,5 +486,28 @@ function Stat({
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+function Row({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="h-2 w-2 rounded-full"
+        style={{ background: color }}
+      />
+      <span className="text-[var(--color-fg-muted)]">{label}</span>
+      <span className="font-medium text-[var(--color-fg)]">
+        ฿{value.toFixed(2)}B
+      </span>
+    </div>
   );
 }

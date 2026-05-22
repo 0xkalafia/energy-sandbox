@@ -39,6 +39,11 @@ const MultiYearCashflow = lazy(() =>
     default: m.MultiYearCashflow,
   })),
 );
+const MonteCarloView = lazy(() =>
+  import("@/components/charts/MonteCarloView").then((m) => ({
+    default: m.MonteCarloView,
+  })),
+);
 
 export default function App() {
   // Hydrate inputs from URL hash on first render
@@ -177,11 +182,11 @@ export default function App() {
               </button>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--color-fg-subtle)]">
-                  Provincial Energy Sandbox
+                  Phetchaburi 2046
                 </p>
                 <h1 className="mt-1 text-xl font-semibold tracking-tight md:text-2xl">
-                  Phetchaburi{" "}
-                  <span className="text-[var(--color-fg-muted)]">2046</span>
+                  Energy{" "}
+                  <span className="text-[var(--color-fg-muted)]">Sandbox</span>
                 </h1>
                 <p className="mt-1 hidden text-sm text-[var(--color-fg-muted)] sm:block">
                   จำลองโครงข่ายพลังงาน 6 ภารกิจ — ปรับ slider แล้วผลลัพธ์อัปเดตทันที
@@ -243,17 +248,7 @@ export default function App() {
               <HourlyChart hourly={hourly} />
               <div className="grid gap-6 lg:grid-cols-2">
                 <BatteryChart hourly={hourly} inputs={inputs} />
-                <FinanceBreakdown
-                  carbonCreditRevenue={kpis.carbonCreditRevenue}
-                  methanolRevenue={kpis.methanolRevenue}
-                  dcLeasingRevenue={kpis.dcLeasingRevenue}
-                  costAvoidance={kpis.costAvoidance}
-                  opexEstimate={kpis.opexEstimate}
-                  capexEstimate={kpis.capexEstimate}
-                  totalAnnualValue={kpis.totalAnnualValue}
-                  yearlyDemandGWh={kpis.yearlyDemandGWh}
-                  paybackYears={kpis.paybackYears}
-                />
+                <FinanceBreakdown kpis={kpis} />
               </div>
             </TabsContent>
 
@@ -277,6 +272,11 @@ export default function App() {
               >
                 <ResilienceView inputs={inputs} />
               </Suspense>
+              <Suspense
+                fallback={<ChartSkeleton title="Monte Carlo…" height={260} />}
+              >
+                <MonteCarloView inputs={inputs} />
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="carbon" className="mt-6 space-y-6">
@@ -292,19 +292,9 @@ export default function App() {
               <Suspense
                 fallback={<ChartSkeleton title="Multi-year cashflow…" height={340} />}
               >
-                <MultiYearCashflow kpis={kpis} />
+                <MultiYearCashflow kpis={kpis} inputs={inputs} />
               </Suspense>
-              <FinanceBreakdown
-                carbonCreditRevenue={kpis.carbonCreditRevenue}
-                methanolRevenue={kpis.methanolRevenue}
-                dcLeasingRevenue={kpis.dcLeasingRevenue}
-                costAvoidance={kpis.costAvoidance}
-                opexEstimate={kpis.opexEstimate}
-                capexEstimate={kpis.capexEstimate}
-                totalAnnualValue={kpis.totalAnnualValue}
-                yearlyDemandGWh={kpis.yearlyDemandGWh}
-                paybackYears={kpis.paybackYears}
-              />
+              <FinanceBreakdown kpis={kpis} />
             </TabsContent>
           </Tabs>
 
@@ -319,20 +309,8 @@ export default function App() {
   );
 }
 
-interface FinanceProps {
-  carbonCreditRevenue: number;
-  methanolRevenue: number;
-  dcLeasingRevenue: number;
-  costAvoidance: number;
-  opexEstimate: number;
-  capexEstimate: number;
-  totalAnnualValue: number;
-  yearlyDemandGWh: number;
-  paybackYears: number;
-}
-
-function FinanceBreakdown(p: FinanceProps) {
-  const rows: Array<{ label: string; value: string; tone?: "emerald" | "rose" }> =
+function FinanceBreakdown({ kpis: p }: { kpis: import("@/data/types").KPIs }) {
+  const rows: Array<{ label: string; value: string; tone?: "emerald" | "rose"; hint?: string }> =
     [
       {
         label: "Carbon Credits",
@@ -343,6 +321,12 @@ function FinanceBreakdown(p: FinanceProps) {
         label: "E-Methanol",
         value: fmtBaht(p.methanolRevenue),
         tone: "emerald",
+      },
+      {
+        label: "H₂ co-products (O₂ + waste heat)",
+        value: fmtBaht(p.hydrogenCoProductRevenue),
+        tone: "emerald",
+        hint: `${(p.oxygenTonPerYear / 1e3).toFixed(0)}k ton O₂ · ${p.wasteHeatGWhPerYear.toFixed(0)} GWh heat / ปี`,
       },
       {
         label: "Data Center leasing",
@@ -376,13 +360,20 @@ function FinanceBreakdown(p: FinanceProps) {
           {rows.map((r) => (
             <div
               key={r.label}
-              className="flex items-center justify-between py-2.5"
+              className="flex items-center justify-between gap-3 py-2.5"
             >
-              <span className="text-sm text-[var(--color-fg-muted)]">
-                {r.label}
-              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm text-[var(--color-fg-muted)]">
+                  {r.label}
+                </p>
+                {r.hint && (
+                  <p className="tabular truncate text-[10px] text-[var(--color-fg-subtle)]">
+                    {r.hint}
+                  </p>
+                )}
+              </div>
               <span
-                className={`tabular text-sm font-medium ${
+                className={`tabular shrink-0 text-sm font-medium ${
                   r.tone === "rose"
                     ? "text-[var(--color-rose-glow)]"
                     : "text-[var(--color-emerald-glow)]"

@@ -1,0 +1,320 @@
+import { useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Field } from "@/components/ui/Field";
+import { Slider } from "@/components/ui/Slider";
+import { fmtPct } from "@/lib/utils";
+import {
+  DEFAULT_MC,
+  histogram,
+  runMonteCarlo,
+  type MonteCarloOptions,
+} from "@/engine/monteCarlo";
+import type { SimInputs } from "@/data/types";
+
+interface Props {
+  inputs: SimInputs;
+}
+
+export function MonteCarloView({ inputs }: Props) {
+  const [opts, setOpts] = useState<MonteCarloOptions>(DEFAULT_MC);
+
+  const result = useMemo(() => runMonteCarlo(inputs, opts), [inputs, opts]);
+
+  const update = <K extends keyof MonteCarloOptions>(
+    key: K,
+    val: MonteCarloOptions[K],
+  ) => setOpts({ ...opts, [key]: val });
+
+  const updateWeight = (
+    k: keyof MonteCarloOptions["weights"],
+    val: number,
+  ) => setOpts({ ...opts, weights: { ...opts.weights, [k]: val / 100 } });
+
+  // Histograms — bucketed for chart
+  const socHist = histogram(
+    result.runs.map((r) => r.lowestSoC * 100),
+    20,
+    [0, 100],
+  );
+  const importHist = histogram(
+    result.runs.map((r) => r.importGWh),
+    20,
+  );
+
+  const p = result.percentiles;
+
+  return (
+    <div className="space-y-6">
+      {/* Controls */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Monte Carlo simulation</CardTitle>
+              <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
+                Run N stochastic weather realizations · see P5/P50/P95 distribution
+              </p>
+            </div>
+            <Badge tone="violet">{result.runs.length} runs</Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <Field
+              label="Runs"
+              value={`${opts.runs}`}
+              hint="จำนวน realizations"
+            >
+              <Slider
+                value={opts.runs}
+                onChange={(v) => update("runs", v)}
+                min={20}
+                max={500}
+                step={10}
+              />
+            </Field>
+            <Field
+              label="Days per run"
+              value={`${opts.days}`}
+              hint="ระยะเวลาแต่ละ run"
+            >
+              <Slider
+                value={opts.days}
+                onChange={(v) => update("days", v)}
+                min={3}
+                max={30}
+                step={1}
+              />
+            </Field>
+            <Field
+              label="Seed"
+              value={`${opts.seed}`}
+              hint="เปลี่ยนเพื่อ resample"
+            >
+              <Slider
+                value={opts.seed}
+                onChange={(v) => update("seed", v)}
+                min={1}
+                max={1000}
+                step={1}
+              />
+            </Field>
+            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-hover)]/40 p-3">
+              <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
+                Unmet risk
+              </p>
+              <p
+                className={`tabular mt-1 text-lg font-semibold ${
+                  result.unmetRiskPct > 0.1
+                    ? "text-[var(--color-rose-glow)]"
+                    : result.unmetRiskPct > 0
+                      ? "text-[var(--color-amber-glow)]"
+                      : "text-[var(--color-emerald-glow)]"
+                }`}
+              >
+                {fmtPct(result.unmetRiskPct)}
+              </p>
+              <p className="mt-0.5 text-[10px] text-[var(--color-fg-subtle)]">
+                % runs ที่มี hour ไฟดับ
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-fg-subtle)]">
+              Season weights (sampled per run)
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field
+                label="ร้อน"
+                value={fmtPct(opts.weights.summer)}
+              >
+                <Slider
+                  value={opts.weights.summer * 100}
+                  onChange={(v) => updateWeight("summer", v)}
+                  max={100}
+                  step={1}
+                />
+              </Field>
+              <Field label="ฝน" value={fmtPct(opts.weights.rainy)}>
+                <Slider
+                  value={opts.weights.rainy * 100}
+                  onChange={(v) => updateWeight("rainy", v)}
+                  max={100}
+                  step={1}
+                />
+              </Field>
+              <Field label="หนาว" value={fmtPct(opts.weights.winter)}>
+                <Slider
+                  value={opts.weights.winter * 100}
+                  onChange={(v) => updateWeight("winter", v)}
+                  max={100}
+                  step={1}
+                />
+              </Field>
+              <Field label="มรสุม" value={fmtPct(opts.weights.monsoon)}>
+                <Slider
+                  value={opts.weights.monsoon * 100}
+                  onChange={(v) => updateWeight("monsoon", v)}
+                  max={100}
+                  step={1}
+                />
+              </Field>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Percentile KPIs */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <Pctile label="Lowest SoC · P5" value={`${(p.lowestSoC.p5 * 100).toFixed(0)}%`} tone="rose" />
+        <Pctile label="P50 (median)" value={`${(p.lowestSoC.p50 * 100).toFixed(0)}%`} tone="violet" />
+        <Pctile label="P95" value={`${(p.lowestSoC.p95 * 100).toFixed(0)}%`} tone="emerald" />
+        <Pctile label="Unmet hrs · P50" value={`${p.unmetHours.p50.toFixed(0)}`} tone={p.unmetHours.p50 > 0 ? "rose" : "emerald"} />
+        <Pctile label="P95" value={`${p.unmetHours.p95.toFixed(0)}`} tone={p.unmetHours.p95 > 0 ? "rose" : "emerald"} />
+        <Pctile label="Import GWh · P50" value={p.importGWh.p50.toFixed(1)} tone="sky" />
+      </div>
+
+      {/* SoC histogram */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Distribution: lowest SoC reached</CardTitle>
+          <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
+            X = SoC bin (%) · Y = run count · red = below 10% DoD floor
+          </p>
+        </CardHeader>
+        <CardContent>
+          <HistogramChart
+            data={socHist}
+            unit="%"
+            redBelow={10}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Import histogram */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Distribution: total grid import</CardTitle>
+          <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
+            How much external grid help did each scenario need?
+          </p>
+        </CardHeader>
+        <CardContent>
+          <HistogramChart data={importHist} unit=" GWh" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function HistogramChart({
+  data,
+  unit,
+  redBelow,
+}: {
+  data: ReturnType<typeof histogram>;
+  unit: string;
+  redBelow?: number;
+}) {
+  return (
+    <div className="h-[220px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          data={data.map((d) => ({
+            label: `${d.lo.toFixed(0)}${unit}`,
+            count: d.count,
+            lo: d.lo,
+          }))}
+          margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+        >
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="var(--color-border)"
+            vertical={false}
+          />
+          <XAxis
+            dataKey="label"
+            stroke="var(--color-fg-subtle)"
+            tick={{ fontSize: 10 }}
+            tickLine={false}
+            axisLine={false}
+            interval={Math.ceil(data.length / 8)}
+          />
+          <YAxis
+            stroke="var(--color-fg-subtle)"
+            tick={{ fontSize: 10 }}
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+          />
+          <Tooltip
+            content={({ active, payload }) => {
+              if (!active || !payload || payload.length === 0) return null;
+              const d = payload[0].payload as { label: string; count: number };
+              return (
+                <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
+                  <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
+                    {d.label}
+                  </p>
+                  <p className="tabular text-sm font-medium text-[var(--color-fg)]">
+                    {d.count} runs
+                  </p>
+                </div>
+              );
+            }}
+          />
+          <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+            {data.map((d, i) => (
+              <Cell
+                key={i}
+                fill={
+                  redBelow !== undefined && d.lo < redBelow
+                    ? "oklch(0.72 0.2 20)"
+                    : "oklch(0.7 0.2 290)"
+                }
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function Pctile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "emerald" | "rose" | "amber" | "sky" | "violet";
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-4">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
+            {label}
+          </p>
+          <Badge tone={tone}>•</Badge>
+        </div>
+        <p className="tabular mt-1 text-lg font-semibold text-[var(--color-fg)]">
+          {value}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}

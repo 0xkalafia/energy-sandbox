@@ -98,6 +98,10 @@ export interface KPIs {
   methanolRevenue: number; // baht
   dcLeasingRevenue: number; // baht
   costAvoidance: number; // baht (fuel+electricity not bought)
+  /** Phase 3.4: co-products from green H2 production (O2 + waste heat) */
+  hydrogenCoProductRevenue: number; // baht
+  oxygenTonPerYear: number; // tonnes O2 produced as by-product
+  wasteHeatGWhPerYear: number; // recoverable thermal energy
   totalAnnualValue: number; // baht
 
   // Investment

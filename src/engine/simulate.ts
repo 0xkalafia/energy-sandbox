@@ -283,8 +283,31 @@ export function computeKPIs(i: SimInputs, hourly: HourlyPoint[]): KPIs {
 
   const costAvoidance = electricitySaving + fuelSaving;
 
+  // Phase 3.4: Hydrogen co-product revenue
+  // Stoichiometry: every kg H2 produces 8 kg O2 as by-product.
+  // Methanol synthesis needs 187 kg H2 per ton methanol (see ENERGY_INTENSITY).
+  // Waste heat: electrolyzer + synthesis releases ~25% of input energy as heat.
+  const h2KgProduced = i.methanolOn
+    ? i.methanolKtPerYear * 1e3 * ENERGY_INTENSITY.h2PerMethanolTon
+    : 0;
+  const oxygenTon = (h2KgProduced * 8) / 1000;
+  // Industrial O2 ~ 5 baht/kg (medical-grade higher, but be conservative)
+  const oxygenRev = oxygenTon * 1000 * 5;
+
+  // Waste heat captured ~ electrolyzer energy × 0.20 (recoverable fraction)
+  const electrolyzerKWh = h2KgProduced * ENERGY_INTENSITY.electrolyzerKWhPerKgH2;
+  const wasteHeatGWh = (electrolyzerKWh * 0.2) / 1e6;
+  // Value of waste heat as displaced industrial heating fuel (~1.5 baht/kWh-th)
+  const wasteHeatRev = wasteHeatGWh * 1e6 * 1.5;
+
+  const hydrogenCoProductRev = oxygenRev + wasteHeatRev;
+
   const totalAnnualValue =
-    carbonCreditRev + methanolRev + dcLeasingRev + costAvoidance;
+    carbonCreditRev +
+    methanolRev +
+    dcLeasingRev +
+    costAvoidance +
+    hydrogenCoProductRev;
 
   // CAPEX rough estimate (very simplified)
   // Solar: 25M baht/MW · Wind: 50M baht/MW · Battery: price/kWh × kWh
@@ -323,6 +346,9 @@ export function computeKPIs(i: SimInputs, hourly: HourlyPoint[]): KPIs {
     methanolRevenue: methanolRev,
     dcLeasingRevenue: dcLeasingRev,
     costAvoidance: costAvoidance,
+    hydrogenCoProductRevenue: hydrogenCoProductRev,
+    oxygenTonPerYear: oxygenTon,
+    wasteHeatGWhPerYear: wasteHeatGWh,
     totalAnnualValue,
     capexEstimate: capex,
     opexEstimate: opex,
