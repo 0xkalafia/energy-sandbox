@@ -9,36 +9,69 @@ import { computeKPIs, simulateDay } from "@/engine/simulate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { fmtBaht, fmtEnergy } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
+import { Menu } from "lucide-react";
 
 export default function App() {
   const [inputs, setInputs] = useState(DEFAULT_INPUTS);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const hourly = useMemo(() => simulateDay(inputs), [inputs]);
   const kpis = useMemo(() => computeKPIs(inputs, hourly), [inputs, hourly]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden text-[var(--color-fg)]">
-      <Sidebar inputs={inputs} setInputs={setInputs} />
+      {/* Desktop sidebar (lg and up) */}
+      <div className="hidden lg:flex lg:h-full lg:w-[340px] lg:shrink-0">
+        <Sidebar inputs={inputs} setInputs={setInputs} />
+      </div>
+
+      {/* Mobile drawer */}
+      {drawerOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+            onClick={() => setDrawerOpen(false)}
+          />
+          <div className="fixed inset-y-0 left-0 z-50 w-[88vw] max-w-[360px] lg:hidden">
+            <Sidebar
+              inputs={inputs}
+              setInputs={setInputs}
+              onClose={() => setDrawerOpen(false)}
+            />
+          </div>
+        </>
+      )}
 
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1600px] space-y-6 px-8 py-6">
+        <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-5 sm:px-6 md:px-8 md:py-6">
           {/* Header */}
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--color-fg-subtle)]">
-                Provincial Energy Sandbox
-              </p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-                Phetchaburi{" "}
-                <span className="text-[var(--color-fg-muted)]">2046</span>
-              </h1>
-              <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-                จำลองโครงข่ายพลังงาน 6 ภารกิจ — ปรับ slider แล้วผลลัพธ์อัปเดตทันที
-              </p>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <button
+                onClick={() => setDrawerOpen(true)}
+                className="mt-1 inline-flex items-center justify-center rounded-md border border-[var(--color-border)] p-2 text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)] lg:hidden"
+                title="Open controls"
+              >
+                <Menu className="h-4 w-4" />
+              </button>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--color-fg-subtle)]">
+                  Provincial Energy Sandbox
+                </p>
+                <h1 className="mt-1 text-xl font-semibold tracking-tight md:text-2xl">
+                  Phetchaburi{" "}
+                  <span className="text-[var(--color-fg-muted)]">2046</span>
+                </h1>
+                <p className="mt-1 hidden text-sm text-[var(--color-fg-muted)] sm:block">
+                  จำลองโครงข่ายพลังงาน 6 ภารกิจ — ปรับ slider แล้วผลลัพธ์อัปเดตทันที
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               <Badge tone="emerald">Live</Badge>
-              <Badge tone="neutral">v0.1</Badge>
+              <Badge tone="neutral" className="hidden sm:inline-flex">
+                v0.1
+              </Badge>
             </div>
           </div>
 

@@ -7,19 +7,36 @@ import { SEASONS } from "@/data/types";
 import { fmtPower } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { DEFAULT_INPUTS } from "@/data/constants";
-import { RotateCcw, Zap, Battery, Flame, Cpu, Droplets, Recycle, Waves } from "lucide-react";
+import {
+  RotateCcw,
+  Zap,
+  Battery,
+  Flame,
+  Cpu,
+  Droplets,
+  Recycle,
+  Waves,
+  X,
+} from "lucide-react";
 
 interface Props {
   inputs: SimInputs;
   setInputs: (i: SimInputs) => void;
+  onClose?: () => void;
 }
 
-export function Sidebar({ inputs, setInputs }: Props) {
+export function Sidebar({ inputs, setInputs, onClose }: Props) {
   const update = <K extends keyof SimInputs>(key: K, val: SimInputs[K]) =>
     setInputs({ ...inputs, [key]: val });
 
   return (
-    <aside className="h-full w-[340px] shrink-0 overflow-y-auto border-r border-[var(--color-border)] bg-[var(--color-bg-elevated)]/40 backdrop-blur-xl">
+    <aside
+      className={cn(
+        "h-full w-full overflow-y-auto border-r border-[var(--color-border)]",
+        "bg-[var(--color-bg-elevated)]/95 backdrop-blur-xl",
+        "lg:w-[340px] lg:shrink-0 lg:bg-[var(--color-bg-elevated)]/40",
+      )}
+    >
       <div className="space-y-8 px-5 py-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -34,13 +51,24 @@ export function Sidebar({ inputs, setInputs }: Props) {
               Energy sandbox — interactive
             </p>
           </div>
-          <button
-            onClick={() => setInputs(DEFAULT_INPUTS)}
-            className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]"
-            title="Reset to defaults"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setInputs(DEFAULT_INPUTS)}
+              className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]"
+              title="Reset to defaults"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="rounded-md border border-[var(--color-border)] p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)] lg:hidden"
+                title="Close sidebar"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Season selector */}

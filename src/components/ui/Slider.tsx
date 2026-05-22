@@ -33,6 +33,11 @@ export function Slider({
       max={max}
       step={step}
       disabled={disabled}
+      // Stop wheel events on the slider so vertical scrolling the sidebar
+      // doesn't accidentally adjust values. We only need to stop propagation
+      // so default page-scroll behaviour is preserved.
+      onWheel={(e) => e.stopPropagation()}
+      onWheelCapture={(e) => e.stopPropagation()}
     >
       <SliderPrimitive.Track className="relative h-1 w-full grow overflow-hidden rounded-full bg-[var(--color-border)]">
         <SliderPrimitive.Range className="absolute h-full bg-gradient-to-r from-[var(--color-emerald-glow)] to-[var(--color-sky-glow)]" />
