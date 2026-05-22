@@ -3,7 +3,33 @@
 
 import type { Season, SimInputs } from "./types";
 
-/** Default inputs = the "Full 2046 Master Plan" from the chat. */
+/** Preset scenarios — sidebar segmented control snaps inputs to one of these. */
+export type PresetId = "conservative" | "balanced" | "aggressive";
+
+export const PRESETS: Record<
+  PresetId,
+  { label: string; description: string; inputs: SimInputs }
+> = {
+  conservative: {
+    label: "Conservative",
+    description: "เน้นโหลดพื้นฐาน + DAC ระดับชดเชย — CAPEX ต่ำ payback เร็ว",
+    inputs: {
+      // declared below as BALANCED then overridden — see PRESETS[].inputs assignments after DEFAULT_INPUTS
+    } as SimInputs,
+  },
+  balanced: {
+    label: "Balanced",
+    description: "Full Phet 2046 master plan — 6 mission ครบ ดึงคาร์บอน 1M ton",
+    inputs: {} as SimInputs,
+  },
+  aggressive: {
+    label: "Aggressive",
+    description: "Carbon hunter 2x + ขยาย E-Methanol เต็มสูบ — Energy hub of ASEAN",
+    inputs: {} as SimInputs,
+  },
+};
+
+/** Default inputs = the "Full 2046 Master Plan" from the chat (Balanced preset). */
 export const DEFAULT_INPUTS: SimInputs = {
   // Supply
   solarMW: 8200,
@@ -40,6 +66,38 @@ export const DEFAULT_INPUTS: SimInputs = {
   methanolPrice: 550,
 
   season: "summer",
+};
+
+// Wire presets to concrete inputs (declared here to reference DEFAULT_INPUTS).
+PRESETS.balanced.inputs = DEFAULT_INPUTS;
+PRESETS.conservative.inputs = {
+  ...DEFAULT_INPUTS,
+  solarMW: 3000,
+  windMW: 1200,
+  biomassMW: 100,
+  dacOn: true,
+  dacTargetMtPerYear: 0.3,
+  methanolOn: false,
+  methanolKtPerYear: 0,
+  dataCenterOn: false,
+  dataCenterMW: 0,
+  desalOn: true,
+  desalMm3PerYear: 80,
+  wasteOn: true,
+  wasteTonPerDay: 900,
+  batteryGWh: 8,
+};
+PRESETS.aggressive.inputs = {
+  ...DEFAULT_INPUTS,
+  solarMW: 12000,
+  windMW: 5000,
+  biomassMW: 150,
+  dacTargetMtPerYear: 2.0,
+  methanolKtPerYear: 1400,
+  dataCenterMW: 500,
+  desalMm3PerYear: 400,
+  wasteTonPerDay: 2500,
+  batteryGWh: 50,
 };
 
 /** Energy intensity per task — used to size demand from targets. */

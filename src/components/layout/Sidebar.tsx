@@ -6,7 +6,7 @@ import type { SimInputs } from "@/data/types";
 import { SEASONS } from "@/data/types";
 import { fmtPower } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { DEFAULT_INPUTS } from "@/data/constants";
+import { DEFAULT_INPUTS, PRESETS, type PresetId } from "@/data/constants";
 import {
   RotateCcw,
   Zap,
@@ -70,6 +70,14 @@ export function Sidebar({ inputs, setInputs, onClose }: Props) {
             )}
           </div>
         </div>
+
+        {/* Preset selector */}
+        <Section title="Preset scenario" icon={<Flame className="h-3.5 w-3.5" />}>
+          <PresetSelector
+            current={detectPreset(inputs)}
+            onSelect={(id) => setInputs(PRESETS[id].inputs)}
+          />
+        </Section>
 
         {/* Season selector */}
         <Section title="ฤดูกาล" icon={<Waves className="h-3.5 w-3.5" />}>
@@ -272,6 +280,68 @@ export function Sidebar({ inputs, setInputs, onClose }: Props) {
         </div>
       </div>
     </aside>
+  );
+}
+
+// ---------- Preset detection & selector ----------
+
+function detectPreset(inputs: SimInputs): PresetId | "custom" {
+  const PRESET_KEYS: PresetId[] = ["conservative", "balanced", "aggressive"];
+  for (const id of PRESET_KEYS) {
+    const p = PRESETS[id].inputs;
+    if (
+      p.solarMW === inputs.solarMW &&
+      p.windMW === inputs.windMW &&
+      p.biomassMW === inputs.biomassMW &&
+      p.batteryGWh === inputs.batteryGWh &&
+      p.dacTargetMtPerYear === inputs.dacTargetMtPerYear &&
+      p.methanolKtPerYear === inputs.methanolKtPerYear &&
+      p.dataCenterMW === inputs.dataCenterMW &&
+      p.desalMm3PerYear === inputs.desalMm3PerYear &&
+      p.wasteTonPerDay === inputs.wasteTonPerDay
+    ) {
+      return id;
+    }
+  }
+  return "custom";
+}
+
+function PresetSelector({
+  current,
+  onSelect,
+}: {
+  current: PresetId | "custom";
+  onSelect: (id: PresetId) => void;
+}) {
+  const ids: PresetId[] = ["conservative", "balanced", "aggressive"];
+  return (
+    <div>
+      <div className="grid grid-cols-3 gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)]/40 p-1">
+        {ids.map((id) => (
+          <button
+            key={id}
+            onClick={() => onSelect(id)}
+            className={cn(
+              "rounded-md px-2 py-1.5 text-[11px] font-medium transition-all",
+              current === id
+                ? "bg-[var(--color-emerald-glow)]/15 text-[var(--color-fg)] shadow-[0_0_0_1px_oklch(0.78_0.18_155/0.35)_inset]"
+                : "text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]",
+            )}
+          >
+            {PRESETS[id].label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-[10px] leading-snug text-[var(--color-fg-subtle)]">
+        {current === "custom" ? (
+          <span className="text-[var(--color-amber-glow)]">
+            ✱ Custom — แตะ preset เพื่อ snap กลับ
+          </span>
+        ) : (
+          PRESETS[current].description
+        )}
+      </p>
+    </div>
   );
 }
 

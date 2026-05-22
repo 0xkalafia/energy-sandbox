@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { KPIGrid } from "@/components/KPIGrid";
 import { HourlyChart } from "@/components/charts/HourlyChart";
@@ -9,11 +9,47 @@ import { computeKPIs, simulateDay } from "@/engine/simulate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { fmtBaht, fmtEnergy } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
-import { Menu } from "lucide-react";
+import { Menu, Link as LinkIcon, Check } from "lucide-react";
+import { decodeInputsFromHash, encodeInputsToHash } from "@/lib/urlHash";
+import { CarbonWaterfall } from "@/components/charts/CarbonWaterfall";
+import { SankeyDiagram } from "@/components/charts/SankeyDiagram";
+import { ResilienceView } from "@/components/charts/ResilienceView";
+import { MultiYearCashflow } from "@/components/charts/MultiYearCashflow";
 
 export default function App() {
-  const [inputs, setInputs] = useState(DEFAULT_INPUTS);
+  // Hydrate inputs from URL hash on first render
+  const [inputs, setInputs] = useState(() => {
+    const fromHash = decodeInputsFromHash(window.location.hash);
+    return fromHash ?? DEFAULT_INPUTS;
+  });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Debounced sync of inputs → URL hash (no history pollution)
+  const hashTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (hashTimer.current) window.clearTimeout(hashTimer.current);
+    hashTimer.current = window.setTimeout(() => {
+      const next = encodeInputsToHash(inputs);
+      const target = next ? `#${next}` : "";
+      if (window.location.hash !== target) {
+        history.replaceState(null, "", window.location.pathname + window.location.search + target);
+      }
+    }, 250);
+    return () => {
+      if (hashTimer.current) window.clearTimeout(hashTimer.current);
+    };
+  }, [inputs]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const hourly = useMemo(() => simulateDay(inputs), [inputs]);
   const kpis = useMemo(() => computeKPIs(inputs, hourly), [inputs, hourly]);
@@ -68,9 +104,26 @@ export default function App() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={copyLink}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]/60 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-fg-muted)] backdrop-blur-md transition-all hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]"
+                title="Copy shareable link"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-3 w-3 text-[var(--color-emerald-glow)]" />
+                    <span>Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <LinkIcon className="h-3 w-3" />
+                    <span>Share</span>
+                  </>
+                )}
+              </button>
               <Badge tone="emerald">Live</Badge>
               <Badge tone="neutral" className="hidden sm:inline-flex">
-                v0.1
+                v0.2
               </Badge>
             </div>
           </div>
@@ -79,8 +132,11 @@ export default function App() {
           <Tabs defaultValue="overview">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="flow">Flow</TabsTrigger>
               <TabsTrigger value="hourly">Hourly</TabsTrigger>
               <TabsTrigger value="battery">Battery</TabsTrigger>
+              <TabsTrigger value="resilience">Resilience</TabsTrigger>
+              <TabsTrigger value="carbon">Carbon</TabsTrigger>
               <TabsTrigger value="finance">Finance</TabsTrigger>
             </TabsList>
 
@@ -103,6 +159,10 @@ export default function App() {
               </div>
             </TabsContent>
 
+            <TabsContent value="flow" className="mt-6 space-y-6">
+              <SankeyDiagram inputs={inputs} hourly={hourly} />
+            </TabsContent>
+
             <TabsContent value="hourly" className="mt-6 space-y-6">
               <HourlyChart hourly={hourly} />
             </TabsContent>
@@ -111,8 +171,17 @@ export default function App() {
               <BatteryChart hourly={hourly} inputs={inputs} />
             </TabsContent>
 
+            <TabsContent value="resilience" className="mt-6 space-y-6">
+              <ResilienceView inputs={inputs} />
+            </TabsContent>
+
+            <TabsContent value="carbon" className="mt-6 space-y-6">
+              <CarbonWaterfall kpis={kpis} />
+            </TabsContent>
+
             <TabsContent value="finance" className="mt-6 space-y-6">
               <KPIGrid kpis={kpis} />
+              <MultiYearCashflow kpis={kpis} />
               <FinanceBreakdown
                 carbonCreditRevenue={kpis.carbonCreditRevenue}
                 methanolRevenue={kpis.methanolRevenue}
