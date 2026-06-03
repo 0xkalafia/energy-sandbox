@@ -10,6 +10,8 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { useChartTheme, SERIES } from "@/lib/chartTheme";
+import { GlassTooltip } from "@/components/charts/ChartTooltip";
 import type { HourlyPoint, SimInputs } from "@/data/types";
 
 interface Props {
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export function BatteryChart({ hourly, inputs }: Props) {
+  const theme = useChartTheme();
   const data = hourly.map((h) => ({
     hour: `${h.hour.toString().padStart(2, "0")}:00`,
     SoC: +(h.batterySoC * 100).toFixed(1),
@@ -45,35 +48,14 @@ export function BatteryChart({ hourly, inputs }: Props) {
             >
               <defs>
                 <linearGradient id="grad-soc" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="5%"
-                    stopColor="oklch(0.7 0.2 290)"
-                    stopOpacity={0.6}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor="oklch(0.7 0.2 290)"
-                    stopOpacity={0.05}
-                  />
+                  <stop offset="5%" stopColor={SERIES.battery} stopOpacity={0.6} />
+                  <stop offset="95%" stopColor={SERIES.battery} stopOpacity={0.05} />
                 </linearGradient>
               </defs>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="oklch(0.28 0.008 270)"
-                vertical={false}
-              />
-              <XAxis
-                dataKey="hour"
-                stroke="oklch(0.5 0.01 270)"
-                tick={{ fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
-              />
+              <CartesianGrid {...theme.gridProps} />
+              <XAxis dataKey="hour" {...theme.axisProps} />
               <YAxis
-                stroke="oklch(0.5 0.01 270)"
-                tick={{ fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
+                {...theme.axisProps}
                 domain={[0, 100]}
                 tickFormatter={(v) => `${v}%`}
               />
@@ -81,32 +63,29 @@ export function BatteryChart({ hourly, inputs }: Props) {
                 content={({ active, payload, label }) => {
                   if (!active || !payload || payload.length === 0) return null;
                   return (
-                    <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
-                      <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                        {label}
-                      </p>
+                    <GlassTooltip title={label}>
                       <p className="tabular text-sm font-medium text-[var(--color-fg)]">
                         {payload[0].value}%
                       </p>
-                    </div>
+                    </GlassTooltip>
                   );
                 }}
               />
               <ReferenceLine
                 y={inputs.batteryDoDFloor * 100}
-                stroke="oklch(0.72 0.2 20)"
+                stroke={SERIES.rose}
                 strokeDasharray="3 3"
                 label={{
                   value: `floor ${(inputs.batteryDoDFloor * 100).toFixed(0)}%`,
                   position: "insideTopRight",
-                  fill: "oklch(0.72 0.2 20)",
+                  fill: SERIES.rose,
                   fontSize: 10,
                 }}
               />
               <Area
                 type="monotone"
                 dataKey="SoC"
-                stroke="oklch(0.7 0.2 290)"
+                stroke={SERIES.battery}
                 fill="url(#grad-soc)"
                 strokeWidth={2}
               />

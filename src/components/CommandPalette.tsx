@@ -23,6 +23,7 @@ import type { SimInputs, Season } from "@/data/types";
 import { DEFAULT_INPUTS, PRESETS, type PresetId } from "@/data/constants";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { TABS } from "@/config/tabs";
 
 interface Props {
   open: boolean;
@@ -31,16 +32,6 @@ interface Props {
   setInputs: (i: SimInputs) => void;
   setActiveTab: (id: string) => void;
 }
-
-const TABS: { id: string; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "flow", label: "Flow" },
-  { id: "hourly", label: "Hourly" },
-  { id: "battery", label: "Battery" },
-  { id: "resilience", label: "Resilience" },
-  { id: "carbon", label: "Carbon" },
-  { id: "finance", label: "Finance" },
-];
 
 const SEASONS: { id: Season; label: string; Icon: typeof Sun }[] = [
   { id: "summer", label: "ฤดูร้อน", Icon: Sun },

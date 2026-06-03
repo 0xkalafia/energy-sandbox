@@ -1,5 +1,4 @@
-import { Card, CardContent } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { StatCard, type Tone } from "@/components/ui/StatCard";
 import type { KPIs } from "@/data/types";
 import { fmtBaht, fmtEnergy } from "@/lib/utils";
 import { TrendingDown, TrendingUp, Leaf, Coins, Zap, Battery } from "lucide-react";
@@ -15,7 +14,7 @@ export function KPIGrid({ kpis }: Props) {
     label: string;
     value: string;
     sub?: string;
-    tone?: "emerald" | "amber" | "rose" | "sky" | "violet" | "neutral";
+    tone?: Tone;
     icon: React.ReactNode;
   }> = [
     {
@@ -65,29 +64,14 @@ export function KPIGrid({ kpis }: Props) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
       {cards.map((c) => (
-        <Card key={c.label} className="group">
-          <CardContent className="pt-5">
-            <div className="flex items-start justify-between">
-              <div className="text-[var(--color-fg-subtle)] transition-colors group-hover:text-[var(--color-fg-muted)]">
-                {c.icon}
-              </div>
-              {c.tone && <Badge tone={c.tone}>•</Badge>}
-            </div>
-            <div className="mt-3 space-y-1">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                {c.label}
-              </p>
-              <p className="tabular text-lg font-semibold tracking-tight text-[var(--color-fg)]">
-                {c.value}
-              </p>
-              {c.sub && (
-                <p className="tabular text-[11px] text-[var(--color-fg-muted)]">
-                  {c.sub}
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          key={c.label}
+          label={c.label}
+          value={c.value}
+          sub={c.sub}
+          tone={c.tone}
+          icon={c.icon}
+        />
       ))}
     </div>
   );

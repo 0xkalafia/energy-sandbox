@@ -1,6 +1,7 @@
 import { ResponsiveContainer, Sankey, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { GlassTooltip } from "@/components/charts/ChartTooltip";
 import { computeDemandSizes } from "@/engine/simulate";
 import { CF_BY_SEASON } from "@/data/constants";
 import type { HourlyPoint, SimInputs } from "@/data/types";
@@ -187,22 +188,19 @@ export function SankeyDiagram({ inputs, hourly }: Props) {
                     };
                     if (p.source && p.target) {
                       return (
-                        <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
-                          <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                            {p.source.name} → {p.target.name}
-                          </p>
-                          <p className="tabular mt-1 text-sm font-medium text-[var(--color-fg)]">
+                        <GlassTooltip title={`${p.source.name} → ${p.target.name}`}>
+                          <p className="tabular text-sm font-medium text-[var(--color-fg)]">
                             {p.value?.toFixed(2)} GWh/day
                           </p>
-                        </div>
+                        </GlassTooltip>
                       );
                     }
                     return (
-                      <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
+                      <GlassTooltip>
                         <p className="text-sm font-medium text-[var(--color-fg)]">
                           {p.name}
                         </p>
-                      </div>
+                      </GlassTooltip>
                     );
                   }}
                 />

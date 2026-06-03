@@ -13,8 +13,10 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { StatCard } from "@/components/ui/StatCard";
 import { cn } from "@/lib/utils";
+import { useChartTheme, SERIES } from "@/lib/chartTheme";
+import { GlassTooltip, seriesTooltip } from "@/components/charts/ChartTooltip";
 import {
   WEATHER_SCENARIOS,
   simulateMultiDay,
@@ -27,6 +29,7 @@ interface Props {
 }
 
 export function ResilienceView({ inputs }: Props) {
+  const theme = useChartTheme();
   const [scenario, setScenario] = useState<WeatherScenario>("monsoonStreak");
   const [days, setDays] = useState(7);
   const [islanded, setIslanded] = useState(true);
@@ -125,27 +128,27 @@ export function ResilienceView({ inputs }: Props) {
 
       {/* Resilience KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <KPIBox
+        <StatCard
           label="Lowest SoC"
           value={`${(result.lowestSoC * 100).toFixed(0)}%`}
           tone={result.lowestSoC <= inputs.batteryDoDFloor + 0.001 ? "rose" : "emerald"}
         />
-        <KPIBox
+        <StatCard
           label="Blackout hours"
           value={result.unmetHours.toString()}
-          hint={`${result.unmetGWh.toFixed(1)} GWh critical shed`}
+          sub={`${result.unmetGWh.toFixed(1)} GWh critical shed`}
           tone={result.unmetHours > 0 ? "rose" : "emerald"}
         />
-        <KPIBox
+        <StatCard
           label="Mission curtailed"
           value={`${result.curtailedHours} hr`}
-          hint={`${result.curtailedGWh.toFixed(1)} GWh deferred`}
+          sub={`${result.curtailedGWh.toFixed(1)} GWh deferred`}
           tone={result.curtailedHours > 0 ? "amber" : "emerald"}
         />
-        <KPIBox
+        <StatCard
           label={islanded ? "Grid import" : "Grid import (total)"}
           value={`${result.importTotalGWh.toFixed(1)} GWh`}
-          hint={islanded ? "islanded → no grid" : undefined}
+          sub={islanded ? "islanded → no grid" : undefined}
           tone={islanded ? "violet" : result.importTotalGWh > days * 3 ? "amber" : "sky"}
         />
       </div>
@@ -172,37 +175,19 @@ export function ResilienceView({ inputs }: Props) {
               >
                 <defs>
                   <linearGradient id="soc-multi" x1="0" y1="0" x2="0" y2="1">
-                    <stop
-                      offset="5%"
-                      stopColor="oklch(0.7 0.2 290)"
-                      stopOpacity={0.5}
-                    />
-                    <stop
-                      offset="95%"
-                      stopColor="oklch(0.7 0.2 290)"
-                      stopOpacity={0.05}
-                    />
+                    <stop offset="5%" stopColor={SERIES.battery} stopOpacity={0.5} />
+                    <stop offset="95%" stopColor={SERIES.battery} stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="oklch(0.28 0.008 270)"
-                  vertical={false}
-                />
+                <CartesianGrid {...theme.gridProps} />
                 <XAxis
                   dataKey="hour"
-                  stroke="oklch(0.5 0.01 270)"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
+                  {...theme.axisProps}
                   tickFormatter={(h) => (h % 24 === 0 ? `d${h / 24}` : "")}
                 />
                 <YAxis
+                  {...theme.axisProps}
                   domain={[0, 100]}
-                  stroke="oklch(0.5 0.01 270)"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
                   tickFormatter={(v) => `${v}%`}
                 />
                 <Tooltip
@@ -214,14 +199,11 @@ export function ResilienceView({ inputs }: Props) {
                       soc: number;
                     };
                     return (
-                      <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
-                        <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                          Day {d.day + 1} · hour {d.hour % 24}
-                        </p>
-                        <p className="tabular mt-1 text-sm font-medium text-[var(--color-fg)]">
+                      <GlassTooltip title={`Day ${d.day + 1} · hour ${d.hour % 24}`}>
+                        <p className="tabular text-sm font-medium text-[var(--color-fg)]">
                           {d.soc}%
                         </p>
-                      </div>
+                      </GlassTooltip>
                     );
                   }}
                 />
@@ -230,25 +212,25 @@ export function ResilienceView({ inputs }: Props) {
                   <ReferenceLine
                     key={i}
                     x={(i + 1) * 24}
-                    stroke="oklch(0.28 0.008 270)"
+                    stroke={theme.grid}
                     strokeDasharray="2 4"
                   />
                 ))}
                 <ReferenceLine
                   y={inputs.batteryDoDFloor * 100}
-                  stroke="oklch(0.72 0.2 20)"
+                  stroke={SERIES.rose}
                   strokeDasharray="3 3"
                   label={{
                     value: `DoD floor ${(inputs.batteryDoDFloor * 100).toFixed(0)}%`,
                     position: "insideTopRight",
-                    fill: "oklch(0.72 0.2 20)",
+                    fill: SERIES.rose,
                     fontSize: 10,
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="soc"
-                  stroke="oklch(0.7 0.2 290)"
+                  stroke={SERIES.battery}
                   fill="url(#soc-multi)"
                   strokeWidth={1.6}
                 />
@@ -279,64 +261,26 @@ export function ResilienceView({ inputs }: Props) {
                 }))}
                 margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
               >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="oklch(0.28 0.008 270)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="day"
-                  stroke="oklch(0.5 0.01 270)"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="oklch(0.5 0.01 270)"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
+                <CartesianGrid {...theme.gridProps} />
+                <XAxis dataKey="day" {...theme.axisProps} />
+                <YAxis {...theme.axisProps} />
                 <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload || payload.length === 0) return null;
-                    return (
-                      <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
-                        <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                          {label}
-                        </p>
-                        {payload.map((p) => (
-                          <div
-                            key={p.name}
-                            className="flex items-center gap-2 text-[11px]"
-                          >
-                            <span
-                              className="h-2 w-2 rounded-full"
-                              style={{ background: p.color }}
-                            />
-                            <span className="text-[var(--color-fg-muted)]">
-                              {p.name}
-                            </span>
-                            <span className="tabular font-medium text-[var(--color-fg)]">
-                              {(p.value as number).toFixed(2)} GWh
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  }}
+                  content={seriesTooltip({
+                    unit: " GWh",
+                    format: (v) => v.toFixed(2),
+                  })}
                 />
-                <Bar dataKey="Supply" fill="oklch(0.78 0.18 155)" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="Demand" fill="oklch(0.96 0.005 270 / 0.6)" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Supply" fill={SERIES.emerald} radius={[3, 3, 0, 0]} />
+                <Bar
+                  dataKey="Demand"
+                  fill="oklch(0.96 0.005 270 / 0.6)"
+                  radius={[3, 3, 0, 0]}
+                />
                 <Bar dataKey="Net" radius={[3, 3, 0, 0]}>
                   {result.daily.map((d, i) => (
                     <Cell
                       key={i}
-                      fill={
-                        d.supplyGWh - d.demandGWh >= 0
-                          ? "oklch(0.78 0.14 235)"
-                          : "oklch(0.72 0.2 20)"
-                      }
+                      fill={d.supplyGWh - d.demandGWh >= 0 ? SERIES.sky : SERIES.rose}
                     />
                   ))}
                 </Bar>
@@ -349,35 +293,3 @@ export function ResilienceView({ inputs }: Props) {
   );
 }
 
-function KPIBox({
-  label,
-  value,
-  tone,
-  hint,
-}: {
-  label: string;
-  value: string;
-  tone: "emerald" | "rose" | "amber" | "sky" | "violet";
-  hint?: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
-            {label}
-          </p>
-          <Badge tone={tone}>•</Badge>
-        </div>
-        <p className="tabular mt-1 text-lg font-semibold text-[var(--color-fg)]">
-          {value}
-        </p>
-        {hint && (
-          <p className="tabular mt-0.5 text-[10px] text-[var(--color-fg-subtle)]">
-            {hint}
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}

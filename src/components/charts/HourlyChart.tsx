@@ -11,6 +11,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { SOURCE_COLORS } from "@/data/constants";
+import { useChartTheme } from "@/lib/chartTheme";
+import { seriesTooltip } from "@/components/charts/ChartTooltip";
 import type { HourlyPoint } from "@/data/types";
 
 interface Props {
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export function HourlyChart({ hourly }: Props) {
+  const theme = useChartTheme();
   const data = hourly.map((h) => ({
     hour: `${h.hour.toString().padStart(2, "0")}:00`,
     Solar: Math.round(h.solar),
@@ -72,28 +75,15 @@ export function HourlyChart({ hourly }: Props) {
                   </linearGradient>
                 ))}
               </defs>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="oklch(0.28 0.008 270)"
-                vertical={false}
-              />
-              <XAxis
-                dataKey="hour"
-                stroke="oklch(0.5 0.01 270)"
-                tick={{ fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
-              />
+              <CartesianGrid {...theme.gridProps} />
+              <XAxis dataKey="hour" {...theme.axisProps} />
               <YAxis
-                stroke="oklch(0.5 0.01 270)"
-                tick={{ fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
+                {...theme.axisProps}
                 tickFormatter={(v) =>
                   v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString()
                 }
               />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={seriesTooltip({ unit: " MW" })} />
               <Area
                 type="monotone"
                 dataKey="Biomass"
@@ -139,39 +129,5 @@ export function HourlyChart({ hourly }: Props) {
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function CustomTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: Array<{ name: string; value: number; color: string }>;
-  label?: string;
-}) {
-  if (!active || !payload || payload.length === 0) return null;
-
-  return (
-    <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
-        {label}
-      </p>
-      <div className="mt-1 space-y-0.5">
-        {payload.map((p) => (
-          <div key={p.name} className="flex items-center gap-2 text-[11px]">
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{ background: p.color }}
-            />
-            <span className="text-[var(--color-fg-muted)]">{p.name}</span>
-            <span className="tabular font-medium text-[var(--color-fg)]">
-              {p.value.toLocaleString()} MW
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }

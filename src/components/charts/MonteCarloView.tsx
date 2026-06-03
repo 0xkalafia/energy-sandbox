@@ -13,6 +13,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Field } from "@/components/ui/Field";
 import { Slider } from "@/components/ui/Slider";
+import { StatCard } from "@/components/ui/StatCard";
+import { useChartTheme, SERIES } from "@/lib/chartTheme";
+import { GlassTooltip } from "@/components/charts/ChartTooltip";
 import { cn, fmtPct } from "@/lib/utils";
 import { Play, Loader2 } from "lucide-react";
 import {
@@ -275,12 +278,12 @@ function MCResults({
 
       {/* Percentile KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        <Pctile label="Lowest SoC · P5" value={`${(p.lowestSoC.p5 * 100).toFixed(0)}%`} tone="rose" />
-        <Pctile label="P50 (median)" value={`${(p.lowestSoC.p50 * 100).toFixed(0)}%`} tone="violet" />
-        <Pctile label="P95" value={`${(p.lowestSoC.p95 * 100).toFixed(0)}%`} tone="emerald" />
-        <Pctile label="Blackout hrs · P50" value={`${p.unmetHours.p50.toFixed(0)}`} tone={p.unmetHours.p50 > 0 ? "rose" : "emerald"} />
-        <Pctile label="P95" value={`${p.unmetHours.p95.toFixed(0)}`} tone={p.unmetHours.p95 > 0 ? "rose" : "emerald"} />
-        <Pctile label="Import GWh · P50" value={p.importGWh.p50.toFixed(1)} tone="sky" />
+        <StatCard label="Lowest SoC · P5" value={`${(p.lowestSoC.p5 * 100).toFixed(0)}%`} tone="rose" />
+        <StatCard label="P50 (median)" value={`${(p.lowestSoC.p50 * 100).toFixed(0)}%`} tone="violet" />
+        <StatCard label="P95" value={`${(p.lowestSoC.p95 * 100).toFixed(0)}%`} tone="emerald" />
+        <StatCard label="Blackout hrs · P50" value={`${p.unmetHours.p50.toFixed(0)}`} tone={p.unmetHours.p50 > 0 ? "rose" : "emerald"} />
+        <StatCard label="P95" value={`${p.unmetHours.p95.toFixed(0)}`} tone={p.unmetHours.p95 > 0 ? "rose" : "emerald"} />
+        <StatCard label="Import GWh · P50" value={p.importGWh.p50.toFixed(1)} tone="sky" />
       </div>
 
       {/* SoC histogram */}
@@ -321,6 +324,7 @@ function HistogramChart({
   unit: string;
   redBelow?: number;
 }) {
+  const theme = useChartTheme();
   return (
     <div className="h-[220px] w-full">
       <ResponsiveContainer width="100%" height="100%">
@@ -332,39 +336,23 @@ function HistogramChart({
           }))}
           margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
         >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="var(--color-border)"
-            vertical={false}
-          />
+          <CartesianGrid {...theme.gridProps} />
           <XAxis
             dataKey="label"
-            stroke="var(--color-fg-subtle)"
-            tick={{ fontSize: 10 }}
-            tickLine={false}
-            axisLine={false}
+            {...theme.axisProps}
             interval={Math.ceil(data.length / 8)}
           />
-          <YAxis
-            stroke="var(--color-fg-subtle)"
-            tick={{ fontSize: 10 }}
-            tickLine={false}
-            axisLine={false}
-            allowDecimals={false}
-          />
+          <YAxis {...theme.axisProps} allowDecimals={false} />
           <Tooltip
             content={({ active, payload }) => {
               if (!active || !payload || payload.length === 0) return null;
               const d = payload[0].payload as { label: string; count: number };
               return (
-                <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
-                  <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                    {d.label}
-                  </p>
+                <GlassTooltip title={d.label}>
                   <p className="tabular text-sm font-medium text-[var(--color-fg)]">
                     {d.count} runs
                   </p>
-                </div>
+                </GlassTooltip>
               );
             }}
           />
@@ -374,8 +362,8 @@ function HistogramChart({
                 key={i}
                 fill={
                   redBelow !== undefined && d.lo < redBelow
-                    ? "oklch(0.72 0.2 20)"
-                    : "oklch(0.7 0.2 290)"
+                    ? SERIES.rose
+                    : SERIES.battery
                 }
               />
             ))}
@@ -386,28 +374,3 @@ function HistogramChart({
   );
 }
 
-function Pctile({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "emerald" | "rose" | "amber" | "sky" | "violet";
-}) {
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
-            {label}
-          </p>
-          <Badge tone={tone}>•</Badge>
-        </div>
-        <p className="tabular mt-1 text-lg font-semibold text-[var(--color-fg)]">
-          {value}
-        </p>
-      </CardContent>
-    </Card>
-  );
-}

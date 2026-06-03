@@ -3,11 +3,10 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { KPIGrid } from "@/components/KPIGrid";
 import { HourlyChart } from "@/components/charts/HourlyChart";
 import { BatteryChart } from "@/components/charts/BatteryChart";
+import { FinanceBreakdown } from "@/components/FinanceBreakdown";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { DEFAULT_INPUTS } from "@/data/constants";
 import { computeKPIs, simulateDay } from "@/engine/simulate";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { fmtBaht, fmtEnergy } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Menu, Link as LinkIcon, Check } from "lucide-react";
 import { decodeInputsFromHash, encodeInputsToHash } from "@/lib/urlHash";
@@ -17,6 +16,7 @@ import { Toaster, toast } from "sonner";
 import { useTheme } from "@/lib/theme";
 import { CommandPalette } from "@/components/CommandPalette";
 import { useKeyboardShortcuts } from "@/lib/useKeyboardShortcuts";
+import { TABS, TAB_IDS } from "@/config/tabs";
 
 // Heavy tab content — lazy load so initial bundle stays lean
 const SankeyDiagram = lazy(() =>
@@ -92,16 +92,7 @@ export default function App() {
   useKeyboardShortcuts({
     onCommandK: () => setPaletteOpen((o) => !o),
     onTab: (i) => {
-      const tabs = [
-        "overview",
-        "flow",
-        "hourly",
-        "battery",
-        "resilience",
-        "carbon",
-        "finance",
-      ];
-      if (tabs[i]) setActiveTab(tabs[i]);
+      if (TAB_IDS[i]) setActiveTab(TAB_IDS[i]);
     },
     onReset: () => {
       setInputs(DEFAULT_INPUTS);
@@ -229,13 +220,11 @@ export default function App() {
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="flow">Flow</TabsTrigger>
-              <TabsTrigger value="hourly">Hourly</TabsTrigger>
-              <TabsTrigger value="battery">Battery</TabsTrigger>
-              <TabsTrigger value="resilience">Resilience</TabsTrigger>
-              <TabsTrigger value="carbon">Carbon</TabsTrigger>
-              <TabsTrigger value="finance">Finance</TabsTrigger>
+              {TABS.map((t) => (
+                <TabsTrigger key={t.id} value={t.id}>
+                  {t.label}
+                </TabsTrigger>
+              ))}
             </TabsList>
 
             <TabsContent value="overview" className="mt-6 space-y-6">
@@ -304,109 +293,3 @@ export default function App() {
   );
 }
 
-function FinanceBreakdown({ kpis: p }: { kpis: import("@/data/types").KPIs }) {
-  const rows: Array<{ label: string; value: string; tone?: "emerald" | "rose"; hint?: string }> =
-    [
-      {
-        label: "Carbon Credits",
-        value: fmtBaht(p.carbonCreditRevenue),
-        tone: "emerald",
-      },
-      {
-        label: "E-Methanol",
-        value: fmtBaht(p.methanolRevenue),
-        tone: "emerald",
-      },
-      {
-        label: "H₂ co-products (O₂ + waste heat)",
-        value: fmtBaht(p.hydrogenCoProductRevenue),
-        tone: "emerald",
-        hint: `${(p.oxygenTonPerYear / 1e3).toFixed(0)}k ton O₂ · ${p.wasteHeatGWhPerYear.toFixed(0)} GWh heat / ปี`,
-      },
-      {
-        label: "Data Center leasing",
-        value: fmtBaht(p.dcLeasingRevenue),
-        tone: "emerald",
-      },
-      {
-        label: "Cost avoidance (ค่าไฟ/น้ำมัน)",
-        value: fmtBaht(p.costAvoidance),
-        tone: "emerald",
-      },
-      {
-        label: "OPEX (รายจ่ายดำเนินงาน)",
-        value: `− ${fmtBaht(p.opexEstimate)}`,
-        tone: "rose",
-      },
-    ];
-
-  const net = p.totalAnnualValue - p.opexEstimate;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Annual financial flow</CardTitle>
-        <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
-          Yearly value vs OPEX · CAPEX = {fmtBaht(p.capexEstimate)}
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div className="divide-y divide-[var(--color-border)]/60">
-          {rows.map((r) => (
-            <div
-              key={r.label}
-              className="flex items-center justify-between gap-3 py-2.5"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm text-[var(--color-fg-muted)]">
-                  {r.label}
-                </p>
-                {r.hint && (
-                  <p className="tabular truncate text-[10px] text-[var(--color-fg-subtle)]">
-                    {r.hint}
-                  </p>
-                )}
-              </div>
-              <span
-                className={`tabular shrink-0 text-sm font-medium ${
-                  r.tone === "rose"
-                    ? "text-[var(--color-rose-glow)]"
-                    : "text-[var(--color-emerald-glow)]"
-                }`}
-              >
-                {r.value}
-              </span>
-            </div>
-          ))}
-          <div className="flex items-center justify-between py-3">
-            <span className="text-sm font-semibold text-[var(--color-fg)]">
-              Net annual cashflow
-            </span>
-            <span className="tabular text-base font-semibold text-[var(--color-fg)]">
-              {fmtBaht(net)}
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-hover)]/40 p-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-[var(--color-fg-muted)]">
-              Yearly demand
-            </span>
-            <span className="tabular text-[11px] font-medium">
-              {fmtEnergy(p.yearlyDemandGWh * 1e6)}
-            </span>
-          </div>
-          <div className="mt-1 flex items-center justify-between">
-            <span className="text-[11px] text-[var(--color-fg-muted)]">
-              Simple payback (yr-1)
-            </span>
-            <span className="tabular text-[11px] font-medium">
-              {p.paybackYears.toFixed(1)} ปี
-            </span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}

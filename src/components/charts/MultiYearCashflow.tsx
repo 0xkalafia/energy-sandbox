@@ -17,6 +17,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Field } from "@/components/ui/Field";
 import { Slider } from "@/components/ui/Slider";
 import { Switch } from "@/components/ui/Switch";
+import { StatCard } from "@/components/ui/StatCard";
+import { useChartTheme, SERIES } from "@/lib/chartTheme";
+import { GlassTooltip, SeriesRow } from "@/components/charts/ChartTooltip";
 import { fmtBaht, fmtPct } from "@/lib/utils";
 import type { KPIs, SimInputs } from "@/data/types";
 import {
@@ -31,6 +34,7 @@ interface Props {
 }
 
 export function MultiYearCashflow({ kpis, inputs }: Props) {
+  const theme = useChartTheme();
   const [opts, setOpts] = useState<MultiYearOptions>(DEFAULT_MULTI_YEAR);
 
   const projection = useMemo(
@@ -202,7 +206,7 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
 
       {/* Projection KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
-        <Stat
+        <StatCard
           label="Payback (degr-adj)"
           value={
             projection.paybackYear
@@ -211,12 +215,12 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
           }
           tone={projection.paybackYear ? "emerald" : "rose"}
         />
-        <Stat
+        <StatCard
           label={`Net Y${opts.years}`}
           value={fmtBaht(projection.totalLifetimeNet)}
           tone={projection.totalLifetimeNet > 0 ? "emerald" : "rose"}
         />
-        <Stat
+        <StatCard
           label="IRR"
           value={
             Number.isFinite(projection.irrApprox)
@@ -225,12 +229,12 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
           }
           tone="violet"
         />
-        <Stat
+        <StatCard
           label="Augmentation (total)"
           value={fmtBaht(projection.totalAugmentation)}
           tone="amber"
         />
-        <Stat
+        <StatCard
           label={`EV @ Y${opts.years}`}
           value={fmtPct(last?.evPenetration ?? 0)}
           tone="sky"
@@ -254,62 +258,27 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
               >
                 <defs>
                   <linearGradient id="band-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="oklch(0.7 0.2 290)" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="oklch(0.7 0.2 290)" stopOpacity={0.05} />
+                    <stop offset="0%" stopColor={SERIES.battery} stopOpacity={0.25} />
+                    <stop offset="100%" stopColor={SERIES.battery} stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--color-border)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="year"
-                  stroke="var(--color-fg-subtle)"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="var(--color-fg-subtle)"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => `${v}B`}
-                />
-                <ReferenceLine
-                  y={0}
-                  stroke="var(--color-border-strong)"
-                  strokeWidth={1}
-                />
+                <CartesianGrid {...theme.gridProps} />
+                <XAxis dataKey="year" {...theme.axisProps} />
+                <YAxis {...theme.axisProps} tickFormatter={(v) => `${v}B`} />
+                <ReferenceLine y={0} stroke={theme.borderStrong} strokeWidth={1} />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload || payload.length === 0) return null;
                     const d = payload[0].payload as (typeof data)[number];
                     return (
-                      <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
-                        <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                          {label}
-                        </p>
-                        <div className="tabular mt-1 space-y-0.5 text-[11px]">
-                          <Row label="Net" value={d.Net} color="oklch(0.78 0.18 155)" />
-                          <Row
-                            label="Cum (mid)"
-                            value={d.Cumulative}
-                            color="oklch(0.7 0.2 290)"
-                          />
-                          <Row
-                            label="Cum (low)"
-                            value={d.CumulativeLow}
-                            color="oklch(0.72 0.2 20)"
-                          />
-                          <Row
-                            label="Cum (high)"
-                            value={d.CumulativeHigh}
-                            color="oklch(0.78 0.14 235)"
-                          />
+                      <GlassTooltip title={label}>
+                        <div className="tabular space-y-0.5 text-[11px]">
+                          <Row label="Net" value={d.Net} color={SERIES.emerald} />
+                          <Row label="Cum (mid)" value={d.Cumulative} color={SERIES.battery} />
+                          <Row label="Cum (low)" value={d.CumulativeLow} color={SERIES.rose} />
+                          <Row label="Cum (high)" value={d.CumulativeHigh} color={SERIES.sky} />
                         </div>
-                      </div>
+                      </GlassTooltip>
                     );
                   }}
                 />
@@ -324,20 +293,13 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
                 />
                 <Bar dataKey="Net" radius={[3, 3, 0, 0]}>
                   {data.map((d, i) => (
-                    <Cell
-                      key={i}
-                      fill={
-                        d.Net >= 0
-                          ? "oklch(0.78 0.18 155)"
-                          : "oklch(0.72 0.2 20)"
-                      }
-                    />
+                    <Cell key={i} fill={d.Net >= 0 ? SERIES.emerald : SERIES.rose} />
                   ))}
                 </Bar>
                 <Line
                   type="monotone"
                   dataKey="Cumulative"
-                  stroke="oklch(0.7 0.2 290)"
+                  stroke={SERIES.battery}
                   strokeWidth={2.5}
                   dot={false}
                   activeDot={{ r: 4 }}
@@ -368,61 +330,35 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
                 }))}
                 margin={{ top: 10, right: 60, left: 0, bottom: 0 }}
               >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--color-border)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="year"
-                  stroke="var(--color-fg-subtle)"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
+                <CartesianGrid {...theme.gridProps} />
+                <XAxis dataKey="year" {...theme.axisProps} />
                 <YAxis
                   yAxisId="left"
-                  stroke="var(--color-fg-subtle)"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
+                  {...theme.axisProps}
                   tickFormatter={(v) => `${v}%`}
                 />
                 <YAxis
                   yAxisId="right"
                   orientation="right"
-                  stroke="var(--color-fg-subtle)"
-                  tick={{ fontSize: 10 }}
-                  tickLine={false}
-                  axisLine={false}
+                  {...theme.axisProps}
                   tickFormatter={(v) => `${v}`}
                 />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload || payload.length === 0) return null;
                     return (
-                      <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
-                        <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                          {label}
-                        </p>
-                        {payload.map((p) => (
-                          <div
-                            key={p.name}
-                            className="flex items-center gap-2 text-[11px]"
-                          >
-                            <span
-                              className="h-2 w-2 rounded-full"
-                              style={{ background: p.color }}
+                      <GlassTooltip title={label}>
+                        <div className="space-y-0.5">
+                          {payload.map((pl) => (
+                            <SeriesRow
+                              key={String(pl.name)}
+                              name={pl.name}
+                              color={pl.color}
+                              value={Number(pl.value).toFixed(2)}
                             />
-                            <span className="text-[var(--color-fg-muted)]">
-                              {p.name}
-                            </span>
-                            <span className="tabular font-medium text-[var(--color-fg)]">
-                              {(p.value as number).toFixed(2)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      </GlassTooltip>
                     );
                   }}
                 />
@@ -430,7 +366,7 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
                   yAxisId="left"
                   type="monotone"
                   dataKey="EV"
-                  stroke="oklch(0.78 0.14 235)"
+                  stroke={SERIES.sky}
                   strokeWidth={2}
                   dot={false}
                   name="EV %"
@@ -439,7 +375,7 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
                   yAxisId="right"
                   type="monotone"
                   dataKey="Lifestyle"
-                  stroke="oklch(0.78 0.18 155)"
+                  stroke={SERIES.emerald}
                   strokeWidth={2}
                   dot={false}
                   name="Lifestyle GWh/day"
@@ -448,7 +384,7 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
                   yAxisId="right"
                   type="monotone"
                   dataKey="Battery"
-                  stroke="oklch(0.7 0.2 290)"
+                  stroke={SERIES.battery}
                   strokeWidth={1.5}
                   strokeDasharray="4 3"
                   dot={false}
@@ -460,32 +396,6 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "emerald" | "rose" | "amber" | "sky" | "violet";
-}) {
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
-            {label}
-          </p>
-          <Badge tone={tone}>•</Badge>
-        </div>
-        <p className="tabular mt-1 text-lg font-semibold text-[var(--color-fg)]">
-          {value}
-        </p>
-      </CardContent>
-    </Card>
   );
 }
 

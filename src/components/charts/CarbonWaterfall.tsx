@@ -10,6 +10,8 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { useChartTheme } from "@/lib/chartTheme";
+import { GlassTooltip } from "@/components/charts/ChartTooltip";
 import type { KPIs } from "@/data/types";
 
 interface Props {
@@ -19,6 +21,7 @@ interface Props {
 // A waterfall is drawn as a BarChart where each bar has a [start, end] range.
 // Recharts supports `data: [{ range: [from, to] }]` for floating bars.
 export function CarbonWaterfall({ kpis }: Props) {
+  const theme = useChartTheme();
   const emissions = kpis.yearlyEmissionTon;
   const captured = kpis.yearlyCaptureTon;
   const net = kpis.netCarbonTon;
@@ -77,23 +80,14 @@ export function CarbonWaterfall({ kpis }: Props) {
               data={data}
               margin={{ top: 16, right: 10, left: 0, bottom: 0 }}
             >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="oklch(0.28 0.008 270)"
-                vertical={false}
-              />
+              <CartesianGrid {...theme.gridProps} />
               <XAxis
                 dataKey="stage"
-                stroke="oklch(0.5 0.01 270)"
+                {...theme.axisProps}
                 tick={{ fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
               />
               <YAxis
-                stroke="oklch(0.5 0.01 270)"
-                tick={{ fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
+                {...theme.axisProps}
                 domain={[min, max]}
                 tickFormatter={(v) =>
                   Math.abs(v) >= 1e6
@@ -108,15 +102,12 @@ export function CarbonWaterfall({ kpis }: Props) {
                   if (!active || !payload || payload.length === 0) return null;
                   const d = payload[0].payload as (typeof data)[number];
                   return (
-                    <div className="rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)]/95 px-3 py-2 shadow-xl backdrop-blur-md">
-                      <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                        {label}
-                      </p>
-                      <p className="tabular mt-1 text-sm font-medium text-[var(--color-fg)]">
+                    <GlassTooltip title={label}>
+                      <p className="tabular text-sm font-medium text-[var(--color-fg)]">
                         {d.delta >= 0 ? "+" : ""}
                         {d.delta.toLocaleString()} tCO₂
                       </p>
-                    </div>
+                    </GlassTooltip>
                   );
                 }}
               />
