@@ -1,78 +1,69 @@
 # Phetchaburi 2046 — Energy Sandbox
 
-Interactive provincial-scale energy simulator. Tune sliders, see hourly load
-profiles, battery dispatch, and financial outcomes update in real-time.
+Interactive provincial-scale energy simulator. Tune sliders and watch hourly
+load, battery dispatch, carbon balance, resilience, and 20-year financials
+update in real time.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/0xkalafia/energy-sandbox)
 
 > Based on a 6-mission scenario for Phetchaburi province in 2046:
-> Lifestyle/EV · DAC carbon capture · E-Methanol · Data Center · Desalination · Plasma Waste.
+> Lifestyle/EV · DAC carbon capture · E-Methanol · Data Center · Desalination · Plasma Waste (+ wastewater).
 
 ## Stack
 
-- **Vite** + **React 19** + **TypeScript**
-- **Tailwind CSS v4** (with `@theme` design tokens)
-- **Recharts** for interactive charts
-- **Radix UI** primitives for accessible controls
-
-## Design language
-
-- Dark-first UI inspired by Linear / Vercel / Stripe dashboards
-- OKLCH color palette with subtle radial-gradient backgrounds
-- Inter (UI) + JetBrains Mono (numbers)
-- Glass-morphism cards, tabular numerals, soft glow accents
+- **Vite** + **React 19** + **TypeScript**, **Tailwind CSS v4** (`@theme` tokens)
+- **Recharts** charts · **Radix UI** primitives · **cmdk** command palette · **Sonner** toasts
+- **Vitest** engine tests · web-worker Monte Carlo
 
 ## Quick start
 
 ```bash
 npm install
-npm run dev      # → http://localhost:5173
-npm run build    # production build
+npm run dev        # → http://localhost:5173
+npm test           # engine unit tests (Vitest)
+npm run typecheck  # tsc --noEmit
+npm run build      # production build
 ```
 
-## Project layout
+## Tabs
 
-```
-src/
-├── App.tsx                      # Tabbed dashboard shell
-├── index.css                    # Tailwind v4 + design tokens
-├── data/
-│   ├── types.ts                 # Sim inputs, hourly point, KPI types
-│   └── constants.ts             # Baseline (Phet 2046), CF/load shapes
-├── engine/
-│   └── simulate.ts              # Pure functions: demand sizing, hourly
-│                                #   supply, battery dispatch, KPI agg
-├── lib/utils.ts                 # cn(), fmtBaht/Energy/Power/Pct
-└── components/
-    ├── layout/Sidebar.tsx       # All inputs (supply, demand, battery)
-    ├── KPIGrid.tsx              # 6 KPI cards
-    ├── charts/HourlyChart.tsx   # Stacked-area supply vs demand
-    ├── charts/BatteryChart.tsx  # State of Charge over 24h
-    └── ui/                      # Card, Slider, Switch, Tabs, Badge, Field
-```
+| Tab | What |
+|---|---|
+| Overview | 6 KPI cards + 24h supply/demand + battery SoC + financial flow |
+| Flow | Sankey: source → mission → output (GWh/day) |
+| Hourly / Battery | Stacked supply vs demand · state-of-charge |
+| Resilience | Multi-day chaining, **Islanded vs Grid-backed**, blackout/curtailment |
+| Carbon | Emissions → DAC capture waterfall |
+| Finance | 20-yr cashflow w/ battery degradation, EV S-curve, carbon-price band |
+| Analysis | Sensitivity tornado (more coming: optimizer, financial MC) |
 
-## Engine logic
+Plus: scenario presets, URL-hash sharing, save/export (JSON + CSV), light/dark
+theme, ⌘K palette, keyboard shortcuts (1–8 / R / S / T).
 
-1. **`computeDemandSizes(inputs)`** — turns mission targets (e.g. "1M ton CO₂ DAC")
-   into GWh/day using per-process intensities (e.g. 2500 kWh/ton).
-2. **`simulateDay(inputs)`** — builds 24 hourly buckets:
-   - Supply: solar/wind shaped, biomass/hydro flat
-   - Demand: lifestyle shaped, others flat baseline
-   - Battery: greedy dispatch with DoD floor and round-trip loss
-3. **`computeKPIs(inputs, hourly)`** — aggregates daily totals,
-   battery cycles, annual carbon/financial flow, CAPEX/OPEX, payback.
+## Engine model
+
+Pure, testable functions in `src/engine/`:
+
+1. **`computeDemandSizes`** — mission targets → GWh/day via process intensities.
+2. **`simulateDay(inputs, {startSoC, gridLimitMW})`** — 24h merit-order dispatch.
+   Demand splits into **critical** (lifestyle, must-serve) and **flexible**
+   (missions, curtailable). Order: renewables → battery → grid(capped) → shed.
+   `unmet` = critical blackout; `curtailed` = flexible deferred. Grid-backed by
+   default (unmet ≡ 0); set `gridLimitMW: 0` for an islanded stress test.
+3. **`simulateMultiDay`** — chains real battery SoC day-to-day.
+4. **`projectMultiYear`** — degradation + augmentation + EV adoption + carbon band.
+5. **`runMonteCarlo`** — seeded stochastic weather (runs off the main thread).
+
+Methanol revenue splits export vs local (`methanolLocalShare`) so a ton is sold
+**or** burned locally, never double-counted.
 
 ## What this is *not*
 
-This is a **scenario sandbox**, not an authoritative forecast. Cost,
-efficiency, and load assumptions are projections discussed in May 2026 and
-live in `src/data/constants.ts` — edit them to fit your own priors.
+A **scenario sandbox**, not an authoritative forecast. Cost/efficiency/load
+assumptions live in `src/data/constants.ts` — edit them to fit your own priors.
 
-## Roadmap (post-MVP)
+## Tests
 
-- [ ] Sankey diagram (energy flow → outputs)
-- [ ] Multi-day simulation (monsoon streak resilience)
-- [ ] Scenario presets (Conservative / Balanced / Aggressive)
-- [ ] Save/load custom scenarios to URL hash
-- [ ] CO₂ waterfall chart
-- [ ] Multi-year cashflow & cumulative payback line
-- [ ] Mobile / responsive layout
-- [ ] Fix: scroll wheel inside sidebar adjusts sliders inadvertently
+`npm test` covers energy conservation, the islanded blackout path, methanol
+split, real SoC chaining, multi-year monotonicity, and Monte Carlo determinism.
+CI (`.github/workflows/ci.yml`) runs typecheck + tests + build on every push.

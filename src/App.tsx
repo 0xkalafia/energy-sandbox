@@ -12,6 +12,7 @@ import { Menu, Link as LinkIcon, Check } from "lucide-react";
 import { decodeInputsFromHash, encodeInputsToHash } from "@/lib/urlHash";
 import { ChartSkeleton } from "@/components/ui/ChartSkeleton";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { ScenariosMenu } from "@/components/ScenariosMenu";
 import { Toaster, toast } from "sonner";
 import { useTheme } from "@/lib/theme";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -42,6 +43,11 @@ const MultiYearCashflow = lazy(() =>
 const MonteCarloView = lazy(() =>
   import("@/components/charts/MonteCarloView").then((m) => ({
     default: m.MonteCarloView,
+  })),
+);
+const SensitivityTornado = lazy(() =>
+  import("@/components/charts/SensitivityTornado").then((m) => ({
+    default: m.SensitivityTornado,
   })),
 );
 
@@ -191,6 +197,7 @@ export default function App() {
                   ⌘K
                 </kbd>
               </button>
+              <ScenariosMenu inputs={inputs} hourly={hourly} setInputs={setInputs} />
               <ThemeToggle />
               <button
                 onClick={copyLink}
@@ -212,7 +219,7 @@ export default function App() {
               </button>
               <Badge tone="emerald">Live</Badge>
               <Badge tone="neutral" className="hidden sm:inline-flex">
-                v0.3
+                v0.4
               </Badge>
             </div>
           </div>
@@ -279,6 +286,14 @@ export default function App() {
                 <MultiYearCashflow kpis={kpis} inputs={inputs} />
               </Suspense>
               <FinanceBreakdown kpis={kpis} />
+            </TabsContent>
+
+            <TabsContent value="analysis" className="mt-6 space-y-6">
+              <Suspense
+                fallback={<ChartSkeleton title="Sensitivity…" height={360} />}
+              >
+                <SensitivityTornado inputs={inputs} />
+              </Suspense>
             </TabsContent>
           </Tabs>
 
