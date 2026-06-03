@@ -13,9 +13,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { Slider } from "@/components/ui/Slider";
 import { StatCard } from "@/components/ui/StatCard";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useChartTheme, SERIES } from "@/lib/chartTheme";
 import { GlassTooltip, SeriesRow } from "@/components/charts/ChartTooltip";
-import { cn } from "@/lib/utils";
 import {
   computeSensitivity,
   METRIC_META,
@@ -75,22 +75,11 @@ export function SensitivityTornado({ inputs }: Props) {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                {METRICS.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setMetric(m.id)}
-                    className={cn(
-                      "rounded-md border px-2 py-1 text-[11px]",
-                      metric === m.id
-                        ? "border-[var(--color-emerald-glow)]/40 bg-[var(--color-emerald-glow)]/10 text-[var(--color-fg)]"
-                        : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",
-                    )}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                value={metric}
+                onChange={setMetric}
+                options={METRICS.map((m) => ({ value: m.id, label: m.label }))}
+              />
               <div className="w-36">
                 <Field label="Sweep ±" value={`${Math.round(pct * 100)}%`}>
                   <Slider

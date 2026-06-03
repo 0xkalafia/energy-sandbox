@@ -14,10 +14,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Field } from "@/components/ui/Field";
 import { Slider } from "@/components/ui/Slider";
 import { StatCard } from "@/components/ui/StatCard";
+import { RunButton } from "@/components/ui/RunButton";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useChartTheme, SERIES } from "@/lib/chartTheme";
 import { GlassTooltip } from "@/components/charts/ChartTooltip";
 import { cn, fmtPct } from "@/lib/utils";
-import { Play, Loader2 } from "lucide-react";
 import {
   DEFAULT_MC,
   histogram,
@@ -99,45 +100,16 @@ export function MonteCarloView({ inputs }: Props) {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                {(
-                  [
-                    { id: true, label: "Islanded" },
-                    { id: false, label: "Grid-backed" },
-                  ] as const
-                ).map((m) => (
-                  <button
-                    key={String(m.id)}
-                    onClick={() => setIslanded(m.id)}
-                    className={cn(
-                      "rounded-md border px-2 py-1 text-[11px]",
-                      islanded === m.id
-                        ? "border-[var(--color-rose-glow)]/40 bg-[var(--color-rose-glow)]/10 text-[var(--color-fg)]"
-                        : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",
-                    )}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={run}
-                disabled={running}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all",
-                  dirty && !running
-                    ? "border-[var(--color-emerald-glow)]/50 bg-[var(--color-emerald-glow)]/10 text-[var(--color-fg)]"
-                    : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",
-                  running && "opacity-60",
-                )}
-              >
-                {running ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Play className="h-3.5 w-3.5" />
-                )}
-                {running ? "Running…" : dirty ? "Run (stale)" : "Run"}
-              </button>
+              <SegmentedControl
+                tone="rose"
+                value={islanded}
+                onChange={setIslanded}
+                options={[
+                  { value: true, label: "Islanded" },
+                  { value: false, label: "Grid-backed" },
+                ]}
+              />
+              <RunButton running={running} dirty={dirty} onClick={run} />
             </div>
           </div>
         </CardHeader>

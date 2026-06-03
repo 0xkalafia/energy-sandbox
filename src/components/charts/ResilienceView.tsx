@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 import { useChartTheme, SERIES } from "@/lib/chartTheme";
 import { GlassTooltip, seriesTooltip } from "@/components/charts/ChartTooltip";
@@ -57,46 +58,24 @@ export function ResilienceView({ inputs }: Props) {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              {/* Grid mode */}
-              <div className="flex items-center gap-1.5">
-                {(
-                  [
-                    { id: true, label: "Islanded" },
-                    { id: false, label: "Grid-backed" },
-                  ] as const
-                ).map((m) => (
-                  <button
-                    key={String(m.id)}
-                    onClick={() => setIslanded(m.id)}
-                    className={cn(
-                      "rounded-md border px-2 py-1 text-[11px]",
-                      islanded === m.id
-                        ? "border-[var(--color-rose-glow)]/40 bg-[var(--color-rose-glow)]/10 text-[var(--color-fg)]"
-                        : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",
-                    )}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                tone="rose"
+                value={islanded}
+                onChange={setIslanded}
+                options={[
+                  { value: true, label: "Islanded" },
+                  { value: false, label: "Grid-backed" },
+                ]}
+              />
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
                   Days
                 </span>
-                {[5, 7, 14, 30].map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => setDays(d)}
-                    className={cn(
-                      "tabular rounded-md border px-2 py-1 text-[11px]",
-                      days === d
-                        ? "border-[var(--color-emerald-glow)]/40 bg-[var(--color-emerald-glow)]/10 text-[var(--color-fg)]"
-                        : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",
-                    )}
-                  >
-                    {d}
-                  </button>
-                ))}
+                <SegmentedControl
+                  value={days}
+                  onChange={setDays}
+                  options={[5, 7, 14, 30].map((d) => ({ value: d, label: `${d}` }))}
+                />
               </div>
             </div>
           </div>

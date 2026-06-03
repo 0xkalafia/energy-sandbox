@@ -13,10 +13,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { Slider } from "@/components/ui/Slider";
 import { StatCard } from "@/components/ui/StatCard";
+import { RunButton } from "@/components/ui/RunButton";
 import { useChartTheme, SERIES } from "@/lib/chartTheme";
 import { GlassTooltip } from "@/components/charts/ChartTooltip";
-import { cn, fmtPct } from "@/lib/utils";
-import { Play, Loader2 } from "lucide-react";
+import { fmtPct } from "@/lib/utils";
 import {
   DEFAULT_FIN_MC,
   histogram,
@@ -70,22 +70,7 @@ export function FinancialMonteCarlo({ inputs }: Props) {
                 and lifetime net. "Given my priors, how likely to pay back?"
               </p>
             </div>
-            <button
-              onClick={run}
-              disabled={running}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-medium",
-                "border-[var(--color-emerald-glow)]/50 bg-[var(--color-emerald-glow)]/10 text-[var(--color-fg)] hover:bg-[var(--color-emerald-glow)]/20",
-                running && "opacity-60",
-              )}
-            >
-              {running ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-              {running ? "Running…" : "Run"}
-            </button>
+            <RunButton running={running} onClick={run} />
           </div>
         </CardHeader>
         <CardContent>

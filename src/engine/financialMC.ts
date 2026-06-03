@@ -5,6 +5,10 @@ import {
   DEFAULT_MULTI_YEAR,
   type MultiYearOptions,
 } from "@/engine/multiYear";
+import { makeRng, gaussian, percentileSorted } from "@/lib/stats";
+
+// Re-export so existing chart imports keep resolving.
+export { histogram } from "@/lib/stats";
 
 export interface FinMCOptions {
   samples: number;
@@ -50,40 +54,13 @@ export interface FinMCResult {
   horizon: number;
 }
 
-// Mulberry32 + Box–Muller
-function makeRng(seed: number) {
-  let s = seed | 0;
-  return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function gauss(rng: () => number, mean: number, sd: number): number {
-  const u = Math.max(1e-9, rng());
-  const v = rng();
-  const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-  return mean + sd * z;
-}
-
-function percentile(sorted: number[], p: number): number {
-  if (sorted.length === 0) return 0;
-  const idx = (sorted.length - 1) * p;
-  const lo = Math.floor(idx);
-  const hi = Math.ceil(idx);
-  return lo === hi
-    ? sorted[lo]
-    : sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
-}
 function pctl(vals: number[]): Pctl {
   const s = [...vals].sort((a, b) => a - b);
   return {
-    p10: percentile(s, 0.1),
-    p50: percentile(s, 0.5),
-    p90: percentile(s, 0.9),
-    mean: vals.reduce((a, b) => a + b, 0) / vals.length,
+    p10: percentileSorted(s, 0.1),
+    p50: percentileSorted(s, 0.5),
+    p90: percentileSorted(s, 0.9),
+    mean: vals.reduce((a, b) => a + b, 0) / (vals.length || 1),
   };
 }
 
@@ -108,14 +85,14 @@ export function runFinancialMC(
   for (let i = 0; i < opts.samples; i++) {
     const sample: SimInputs = {
       ...inputs,
-      carbonPrice: pos(gauss(rng, inputs.carbonPrice, inputs.carbonPrice * opts.sd.carbonPrice)),
+      carbonPrice: pos(gaussian(rng, inputs.carbonPrice, inputs.carbonPrice * opts.sd.carbonPrice)),
       batteryPricePerKWh: pos(
-        gauss(rng, inputs.batteryPricePerKWh, inputs.batteryPricePerKWh * opts.sd.batteryPrice),
+        gaussian(rng, inputs.batteryPricePerKWh, inputs.batteryPricePerKWh * opts.sd.batteryPrice),
       ),
-      methanolPrice: pos(gauss(rng, inputs.methanolPrice, inputs.methanolPrice * opts.sd.methanolPrice)),
-      gridBuyPrice: pos(gauss(rng, inputs.gridBuyPrice, inputs.gridBuyPrice * opts.sd.gridBuyPrice)),
+      methanolPrice: pos(gaussian(rng, inputs.methanolPrice, inputs.methanolPrice * opts.sd.methanolPrice)),
+      gridBuyPrice: pos(gaussian(rng, inputs.gridBuyPrice, inputs.gridBuyPrice * opts.sd.gridBuyPrice)),
       lifestyleGWhPerDay: pos(
-        gauss(rng, inputs.lifestyleGWhPerDay, inputs.lifestyleGWhPerDay * opts.sd.demand),
+        gaussian(rng, inputs.lifestyleGWhPerDay, inputs.lifestyleGWhPerDay * opts.sd.demand),
       ),
     };
 
@@ -140,26 +117,3 @@ export function runFinancialMC(
   };
 }
 
-export function histogram(
-  values: number[],
-  bins: number,
-  range?: [number, number],
-): Array<{ lo: number; hi: number; count: number }> {
-  if (values.length === 0) return [];
-  const min = range ? range[0] : Math.min(...values);
-  const max = range ? range[1] : Math.max(...values);
-  if (min === max) return [{ lo: min, hi: max, count: values.length }];
-  const w = (max - min) / bins;
-  const counts = new Array(bins).fill(0);
-  for (const v of values) {
-    let idx = Math.floor((v - min) / w);
-    if (idx >= bins) idx = bins - 1;
-    if (idx < 0) idx = 0;
-    counts[idx] += 1;
-  }
-  return counts.map((count, i) => ({
-    lo: min + i * w,
-    hi: min + (i + 1) * w,
-    count,
-  }));
-}

@@ -1,5 +1,9 @@
 import type { SimInputs, Season } from "@/data/types";
 import { simulateMultiDay, type WeatherScenario } from "./multiDay";
+import { makeRng, percentiles, type Percentiles } from "@/lib/stats";
+
+// Re-export so existing chart imports (`from "@/engine/monteCarlo"`) keep working.
+export { histogram } from "@/lib/stats";
 
 export interface MonteCarloOptions {
   /** Number of weather realizations to run */
@@ -36,27 +40,6 @@ export interface MonteCarloResult {
   unmetRiskPct: number;
 }
 
-interface Percentiles {
-  p5: number;
-  p25: number;
-  p50: number;
-  p75: number;
-  p95: number;
-  mean: number;
-}
-
-// Mulberry32 PRNG — small, fast, seedable
-function makeRng(seed: number): () => number {
-  let s = seed | 0;
-  return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 function weightedPick(
   rng: () => number,
   weights: MonteCarloOptions["weights"],
@@ -71,27 +54,6 @@ function weightedPick(
   cum += weights.winter / total;
   if (r < cum) return "winter";
   return "monsoon";
-}
-
-function percentile(sorted: number[], p: number): number {
-  if (sorted.length === 0) return 0;
-  const idx = (sorted.length - 1) * p;
-  const lo = Math.floor(idx);
-  const hi = Math.ceil(idx);
-  if (lo === hi) return sorted[lo];
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
-}
-
-function computePercentiles(values: number[]): Percentiles {
-  const sorted = [...values].sort((a, b) => a - b);
-  return {
-    p5: percentile(sorted, 0.05),
-    p25: percentile(sorted, 0.25),
-    p50: percentile(sorted, 0.5),
-    p75: percentile(sorted, 0.75),
-    p95: percentile(sorted, 0.95),
-    mean: values.reduce((a, b) => a + b, 0) / values.length,
-  };
 }
 
 /**
@@ -143,37 +105,10 @@ export function runMonteCarlo(
   return {
     runs,
     percentiles: {
-      lowestSoC: computePercentiles(runs.map((r) => r.lowestSoC)),
-      unmetHours: computePercentiles(runs.map((r) => r.unmetHours)),
-      importGWh: computePercentiles(runs.map((r) => r.importGWh)),
+      lowestSoC: percentiles(runs.map((r) => r.lowestSoC)),
+      unmetHours: percentiles(runs.map((r) => r.unmetHours)),
+      importGWh: percentiles(runs.map((r) => r.importGWh)),
     },
     unmetRiskPct: runs.filter((r) => r.unmetHours > 0).length / runs.length,
   };
-}
-
-/**
- * Bucket a continuous variable into a histogram for chart rendering.
- */
-export function histogram(
-  values: number[],
-  bins: number,
-  range?: [number, number],
-): Array<{ bin: number; count: number; lo: number; hi: number }> {
-  if (values.length === 0) return [];
-  const min = range ? range[0] : Math.min(...values);
-  const max = range ? range[1] : Math.max(...values);
-  if (min === max) return [{ bin: 0, count: values.length, lo: min, hi: max }];
-  const width = (max - min) / bins;
-  const counts = new Array(bins).fill(0);
-  for (const v of values) {
-    let idx = Math.floor((v - min) / width);
-    if (idx === bins) idx = bins - 1;
-    if (idx >= 0 && idx < bins) counts[idx] += 1;
-  }
-  return counts.map((count, i) => ({
-    bin: i,
-    count,
-    lo: min + i * width,
-    hi: min + (i + 1) * width,
-  }));
 }

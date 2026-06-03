@@ -4,7 +4,8 @@ import { StatCard } from "@/components/ui/StatCard";
 import { Field } from "@/components/ui/Field";
 import { Slider } from "@/components/ui/Slider";
 import { cn, fmtBaht } from "@/lib/utils";
-import { Play, Loader2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
+import { RunButton } from "@/components/ui/RunButton";
 import {
   DEFAULT_OPT,
   optimizeResilientMix,
@@ -61,18 +62,7 @@ export function Optimizer({ inputs }: Props) {
                 held).
               </p>
             </div>
-            <button
-              onClick={run}
-              disabled={running}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-medium",
-                "border-[var(--color-emerald-glow)]/50 bg-[var(--color-emerald-glow)]/10 text-[var(--color-fg)] hover:bg-[var(--color-emerald-glow)]/20",
-                running && "opacity-60",
-              )}
-            >
-              {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-              {running ? "Searching…" : "Optimize"}
-            </button>
+            <RunButton running={running} onClick={run} idleLabel="Optimize" runningLabel="Searching…" />
           </div>
         </CardHeader>
         <CardContent>
