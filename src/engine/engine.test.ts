@@ -4,6 +4,8 @@ import { computeKPIs, simulateDay } from "@/engine/simulate";
 import { simulateMultiDay } from "@/engine/multiDay";
 import { projectMultiYear, DEFAULT_MULTI_YEAR } from "@/engine/multiYear";
 import { runMonteCarlo, DEFAULT_MC } from "@/engine/monteCarlo";
+import { optimizeResilientMix, DEFAULT_OPT } from "@/engine/optimize";
+import { runFinancialMC, DEFAULT_FIN_MC } from "@/engine/financialMC";
 
 describe("simulateDay — hourly dispatch", () => {
   it("returns 24 hourly points", () => {
@@ -200,6 +202,42 @@ describe("runMonteCarlo", () => {
       { gridLimitMW: 0 },
     );
     expect(r.runs).toHaveLength(25);
+  });
+});
+
+describe("optimizeResilientMix", () => {
+  it("returns a full grid and a feasible min-CAPEX best", () => {
+    const r = optimizeResilientMix(DEFAULT_INPUTS, { ...DEFAULT_OPT, solarSteps: 5, batterySteps: 5 });
+    expect(r.grid).toHaveLength(25);
+    if (r.best) {
+      expect(r.best.feasible).toBe(true);
+      const feasible = r.grid.filter((p) => p.feasible);
+      const minCapex = Math.min(...feasible.map((p) => p.capex));
+      expect(r.best.capex).toBe(minCapex);
+    }
+  });
+
+  it("bigger solar+battery is never infeasible if a smaller one was feasible", () => {
+    const r = optimizeResilientMix(DEFAULT_INPUTS, { ...DEFAULT_OPT, solarSteps: 5, batterySteps: 5 });
+    // monotonic-ish: the max solar+max battery corner should be feasible if any is
+    const anyFeasible = r.grid.some((p) => p.feasible);
+    if (anyFeasible) {
+      const corner = r.grid.reduce((a, b) =>
+        a.solarMW + a.batteryGWh * 100 > b.solarMW + b.batteryGWh * 100 ? a : b,
+      );
+      expect(corner.feasible).toBe(true);
+    }
+  });
+});
+
+describe("runFinancialMC", () => {
+  it("is deterministic for a fixed seed and reports valid probabilities", () => {
+    const a = runFinancialMC(DEFAULT_INPUTS, { ...DEFAULT_FIN_MC, samples: 80, seed: 3 });
+    const b = runFinancialMC(DEFAULT_INPUTS, { ...DEFAULT_FIN_MC, samples: 80, seed: 3 });
+    expect(a.probPaysBack).toBe(b.probPaysBack);
+    expect(a.probPaysBack).toBeGreaterThanOrEqual(0);
+    expect(a.probPaysBack).toBeLessThanOrEqual(1);
+    expect(a.payback.p10).toBeLessThanOrEqual(a.payback.p90);
   });
 });
 

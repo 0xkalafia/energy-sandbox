@@ -50,6 +50,14 @@ const SensitivityTornado = lazy(() =>
     default: m.SensitivityTornado,
   })),
 );
+const FinancialMonteCarlo = lazy(() =>
+  import("@/components/charts/FinancialMonteCarlo").then((m) => ({
+    default: m.FinancialMonteCarlo,
+  })),
+);
+const Optimizer = lazy(() =>
+  import("@/components/charts/Optimizer").then((m) => ({ default: m.Optimizer })),
+);
 
 export default function App() {
   // Hydrate inputs from URL hash on first render
@@ -288,11 +296,21 @@ export default function App() {
               <FinanceBreakdown kpis={kpis} />
             </TabsContent>
 
-            <TabsContent value="analysis" className="mt-6 space-y-6">
+            <TabsContent value="analysis" className="mt-6 space-y-8">
               <Suspense
                 fallback={<ChartSkeleton title="Sensitivity…" height={360} />}
               >
                 <SensitivityTornado inputs={inputs} />
+              </Suspense>
+              <Suspense
+                fallback={<ChartSkeleton title="Optimizer…" height={300} />}
+              >
+                <Optimizer inputs={inputs} />
+              </Suspense>
+              <Suspense
+                fallback={<ChartSkeleton title="Financial MC…" height={300} />}
+              >
+                <FinancialMonteCarlo inputs={inputs} />
               </Suspense>
             </TabsContent>
           </Tabs>
