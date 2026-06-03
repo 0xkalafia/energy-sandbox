@@ -6,6 +6,7 @@ import { projectMultiYear, DEFAULT_MULTI_YEAR } from "@/engine/multiYear";
 import { runMonteCarlo, DEFAULT_MC } from "@/engine/monteCarlo";
 import { optimizeResilientMix, DEFAULT_OPT } from "@/engine/optimize";
 import { runFinancialMC, DEFAULT_FIN_MC } from "@/engine/financialMC";
+import { simulateHouse, DEFAULT_HOUSE } from "@/engine/house";
 
 describe("simulateDay — hourly dispatch", () => {
   it("returns 24 hourly points", () => {
@@ -238,6 +239,29 @@ describe("runFinancialMC", () => {
     expect(a.probPaysBack).toBeGreaterThanOrEqual(0);
     expect(a.probPaysBack).toBeLessThanOrEqual(1);
     expect(a.payback.p10).toBeLessThanOrEqual(a.payback.p90);
+  });
+});
+
+describe("simulateHouse (residential)", () => {
+  it("produces 24 hours and sane self-sufficiency in [0,1]", () => {
+    const r = simulateHouse(DEFAULT_HOUSE);
+    expect(r.hourly).toHaveLength(24);
+    expect(r.selfSufficiency).toBeGreaterThanOrEqual(0);
+    expect(r.selfSufficiency).toBeLessThanOrEqual(1);
+    expect(r.selfConsumption).toBeLessThanOrEqual(1.0000001);
+  });
+
+  it("adding a battery raises self-sufficiency and saves money", () => {
+    const noBatt = simulateHouse({ ...DEFAULT_HOUSE, batteryKWh: 0 });
+    const withBatt = simulateHouse({ ...DEFAULT_HOUSE, batteryKWh: 15 });
+    expect(withBatt.selfSufficiency).toBeGreaterThanOrEqual(noBatt.selfSufficiency);
+    expect(withBatt.monthlySaving).toBeGreaterThanOrEqual(noBatt.monthlySaving);
+  });
+
+  it("more solar exports more / imports less", () => {
+    const small = simulateHouse({ ...DEFAULT_HOUSE, solarW: 2000 });
+    const big = simulateHouse({ ...DEFAULT_HOUSE, solarW: 8000 });
+    expect(big.importKWhDay).toBeLessThanOrEqual(small.importKWhDay);
   });
 });
 

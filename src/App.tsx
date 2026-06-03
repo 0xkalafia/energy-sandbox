@@ -58,6 +58,9 @@ const FinancialMonteCarlo = lazy(() =>
 const Optimizer = lazy(() =>
   import("@/components/charts/Optimizer").then((m) => ({ default: m.Optimizer })),
 );
+const HouseMode = lazy(() =>
+  import("@/components/HouseMode").then((m) => ({ default: m.HouseMode })),
+);
 
 export default function App() {
   // Hydrate inputs from URL hash on first render
@@ -311,6 +314,14 @@ export default function App() {
                 fallback={<ChartSkeleton title="Financial MC…" height={300} />}
               >
                 <FinancialMonteCarlo inputs={inputs} />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="house" className="mt-6 space-y-6">
+              <Suspense
+                fallback={<ChartSkeleton title="House mode…" height={300} />}
+              >
+                <HouseMode />
               </Suspense>
             </TabsContent>
           </Tabs>

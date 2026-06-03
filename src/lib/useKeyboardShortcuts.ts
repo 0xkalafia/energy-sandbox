@@ -8,7 +8,7 @@ interface Handlers {
   onTheme: () => void;
 }
 
-const TAB_KEYS = ["1", "2", "3", "4", "5", "6", "7"];
+const TAB_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 /**
  * Global keyboard shortcuts. Ignored when typing in an input/textarea or
