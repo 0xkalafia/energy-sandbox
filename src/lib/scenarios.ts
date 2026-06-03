@@ -1,4 +1,5 @@
 import type { HourlyPoint, SimInputs } from "@/data/types";
+import { DEFAULT_INPUTS } from "@/data/constants";
 
 const KEY = "phet-sim-scenarios";
 
@@ -60,6 +61,17 @@ function triggerDownload(filename: string, content: string, mime: string) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Parse an uploaded scenario .json file into SimInputs (merged over defaults,
+ *  so partial / older exports still load). Unknown keys are ignored. */
+export function parseScenarioJSON(text: string): SimInputs {
+  const obj = JSON.parse(text) as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...DEFAULT_INPUTS };
+  for (const k of Object.keys(DEFAULT_INPUTS)) {
+    if (k in obj) out[k] = obj[k];
+  }
+  return out as unknown as SimInputs;
 }
 
 export function downloadScenarioJSON(inputs: SimInputs, name = "scenario") {

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Info } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 
@@ -14,6 +15,20 @@ interface Props {
   icon?: ReactNode;
   /** Optional override colour for the value text. */
   valueClassName?: string;
+  /** "Why this number?" — shows an (i) with the formula/assumption on hover. */
+  info?: string;
+}
+
+function InfoDot({ info }: { info: string }) {
+  return (
+    <span
+      title={info}
+      className="inline-flex cursor-help text-[var(--color-fg-subtle)] hover:text-[var(--color-fg-muted)]"
+      aria-label={info}
+    >
+      <Info className="h-3 w-3" />
+    </span>
+  );
 }
 
 /**
@@ -31,6 +46,7 @@ export function StatCard({
   tone = "neutral",
   icon,
   valueClassName,
+  info,
 }: Props) {
   if (icon) {
     return (
@@ -40,7 +56,10 @@ export function StatCard({
             <div className="text-[var(--color-fg-subtle)] transition-colors group-hover:text-[var(--color-fg-muted)]">
               {icon}
             </div>
-            <Badge tone={tone}>•</Badge>
+            <div className="flex items-center gap-1.5">
+              {info && <InfoDot info={info} />}
+              <Badge tone={tone}>•</Badge>
+            </div>
           </div>
           <div className="mt-3 space-y-1">
             <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
@@ -72,7 +91,10 @@ export function StatCard({
           <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
             {label}
           </p>
-          <Badge tone={tone}>•</Badge>
+          <div className="flex items-center gap-1.5">
+            {info && <InfoDot info={info} />}
+            <Badge tone={tone}>•</Badge>
+          </div>
         </div>
         <p
           className={

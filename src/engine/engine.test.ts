@@ -10,6 +10,7 @@ import { simulateHouse, DEFAULT_HOUSE } from "@/engine/house";
 import { allocate } from "@/data/districts";
 import { timeline, inputsForYear, START_YEAR, END_YEAR } from "@/engine/timeMachine";
 import { annualGrid } from "@/engine/annual";
+import { parseScenarioJSON } from "@/lib/scenarios";
 
 describe("simulateDay — hourly dispatch", () => {
   it("returns 24 hourly points", () => {
@@ -316,6 +317,19 @@ describe("time machine build-out", () => {
 describe("annual grid", () => {
   it("produces 12×24 cells", () => {
     expect(annualGrid(DEFAULT_INPUTS)).toHaveLength(288);
+  });
+});
+
+describe("scenario JSON round-trip", () => {
+  it("re-parses a full export back to the same inputs", () => {
+    const parsed = parseScenarioJSON(JSON.stringify(DEFAULT_INPUTS));
+    expect(parsed).toEqual(DEFAULT_INPUTS);
+  });
+  it("merges a partial export over defaults and ignores junk keys", () => {
+    const parsed = parseScenarioJSON('{"solarMW":9999,"bogusKey":1}');
+    expect(parsed.solarMW).toBe(9999);
+    expect(parsed.windMW).toBe(DEFAULT_INPUTS.windMW);
+    expect((parsed as unknown as Record<string, unknown>).bogusKey).toBeUndefined();
   });
 });
 

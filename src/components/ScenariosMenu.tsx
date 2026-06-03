@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Save, Download, Trash2, FolderOpen, FileJson, FileSpreadsheet } from "lucide-react";
+import { Save, Download, Trash2, FolderOpen, FileJson, FileSpreadsheet, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -7,6 +7,7 @@ import {
   downloadHourlyCSV,
   downloadScenarioJSON,
   listScenarios,
+  parseScenarioJSON,
   saveScenario,
   type SavedScenario,
 } from "@/lib/scenarios";
@@ -23,6 +24,21 @@ export function ScenariosMenu({ inputs, hourly, setInputs }: Props) {
   const [name, setName] = useState("");
   const [saved, setSaved] = useState<SavedScenario[]>([]);
   const ref = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-importing the same file
+    if (!file) return;
+    try {
+      const next = parseScenarioJSON(await file.text());
+      setInputs(next);
+      setOpen(false);
+      toast.success(`นำเข้า "${file.name}"`);
+    } catch {
+      toast.error("ไฟล์ JSON ไม่ถูกต้อง");
+    }
+  };
 
   useEffect(() => {
     if (open) setSaved(listScenarios());
@@ -125,12 +141,27 @@ export function ScenariosMenu({ inputs, hourly, setInputs }: Props) {
             )}
           </div>
 
-          {/* Export row */}
+          {/* Import / Export row */}
           <div className="border-t border-[var(--color-border)] p-2">
             <p className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-fg-subtle)]">
-              Export
+              Import / Export
             </p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={onImportFile}
+              className="hidden"
+            />
             <div className="flex gap-1.5">
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[var(--color-border)] px-2 py-1.5 text-[11px] font-medium text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]"
+              >
+                <Upload className="h-3 w-3" />
+                <FileJson className="h-3 w-3" />
+                Import
+              </button>
               <ExportBtn
                 icon={<FileJson className="h-3 w-3" />}
                 label="JSON"
@@ -141,7 +172,7 @@ export function ScenariosMenu({ inputs, hourly, setInputs }: Props) {
               />
               <ExportBtn
                 icon={<FileSpreadsheet className="h-3 w-3" />}
-                label="CSV (24h)"
+                label="CSV"
                 onClick={() => {
                   downloadHourlyCSV(hourly, name || "hourly");
                   toast.success("ดาวน์โหลด hourly.csv");

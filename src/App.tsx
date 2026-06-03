@@ -243,7 +243,7 @@ export default function App() {
               </button>
               <Badge tone="emerald">Live</Badge>
               <Badge tone="neutral" className="hidden sm:inline-flex">
-                v0.4
+                v0.5
               </Badge>
             </div>
           </div>
