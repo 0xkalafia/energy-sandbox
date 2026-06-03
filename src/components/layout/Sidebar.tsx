@@ -177,7 +177,7 @@ export function Sidebar({ inputs, setInputs, onClose }: Props) {
             label="E-Methanol"
             on={inputs.methanolOn}
             onToggle={(v) => update("methanolOn", v)}
-            description={`${inputs.methanolKtPerYear} kt/ปี`}
+            description={`${inputs.methanolKtPerYear} kt/ปี · local ${Math.round(inputs.methanolLocalShare * 100)}%`}
           >
             <Slider
               value={inputs.methanolKtPerYear}
@@ -185,6 +185,23 @@ export function Sidebar({ inputs, setInputs, onClose }: Props) {
               min={0}
               max={1500}
               step={10}
+              disabled={!inputs.methanolOn}
+            />
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-[10px] text-[var(--color-fg-subtle)]">
+                ใช้ในจังหวัด vs ส่งออก
+              </span>
+              <span className="tabular text-[10px] text-[var(--color-fg-muted)]">
+                local {Math.round(inputs.methanolLocalShare * 100)}% / export{" "}
+                {Math.round((1 - inputs.methanolLocalShare) * 100)}%
+              </span>
+            </div>
+            <Slider
+              value={inputs.methanolLocalShare * 100}
+              onChange={(v) => update("methanolLocalShare", v / 100)}
+              min={0}
+              max={100}
+              step={5}
               disabled={!inputs.methanolOn}
             />
           </ModuleRow>

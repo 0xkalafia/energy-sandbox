@@ -43,6 +43,7 @@ export const DEFAULT_INPUTS: SimInputs = {
   dacTargetMtPerYear: 1.0,
   methanolOn: true,
   methanolKtPerYear: 727,
+  methanolLocalShare: 0.3, // 30% used locally (displaces fuel), 70% exported
   dataCenterOn: true,
   dataCenterMW: 200,
   desalOn: true,
@@ -94,6 +95,7 @@ PRESETS.aggressive.inputs = {
   biomassMW: 150,
   dacTargetMtPerYear: 2.0,
   methanolKtPerYear: 1400,
+  methanolLocalShare: 0.15, // export-hub: 85% sold abroad
   dataCenterMW: 500,
   desalMm3PerYear: 400,
   wasteTonPerDay: 2500,

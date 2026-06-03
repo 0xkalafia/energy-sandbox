@@ -103,9 +103,10 @@ export function projectMultiYear(
   const baseLifestyle = inputs.lifestyleGWhPerDay;
   const initialPenetration = 0.05; // assume 5% EVs in year 0
 
-  // Pre-calculate steady-state value composition for scaling
-  const baseRevenueWithoutCarbon =
-    kpis.methanolRevenue + kpis.dcLeasingRevenue + kpis.costAvoidance;
+  // Cost-avoidance splits into an EV-sensitive part (lifestyle electricity,
+  // grows with adoption) and a flat part (desal/waste/wwt + fuel saving).
+  const costAvoidEvSensitive = kpis.costAvoidanceEvSensitive;
+  const costAvoidFlat = kpis.costAvoidance - costAvoidEvSensitive;
   const baseCarbonRevenue = kpis.carbonCreditRevenue;
 
   let paybackYear: number | null = null;
@@ -142,15 +143,16 @@ export function projectMultiYear(
     const carbonLow = carbonMid * (1 - uncertaintyAtY);
     const carbonHigh = carbonMid * (1 + uncertaintyAtY);
 
-    // Cost avoidance scales with lifestyle growth (more EVs = more avoided fuel)
-    const costAvoidanceFactor = lifestyleScale;
+    // Only the lifestyle-electricity part of cost avoidance grows with EV
+    // adoption; desal/waste/wwt + fuel saving stay flat.
     const methanolFactor = Math.pow(1 + 0.5 * opts.carbonPriceGrowth, y - 1);
     const dcFactor = Math.pow(1 + 0.5 * opts.carbonPriceGrowth, y - 1);
 
     const revenueOther =
       kpis.methanolRevenue * methanolFactor +
       kpis.dcLeasingRevenue * dcFactor +
-      kpis.costAvoidance * costAvoidanceFactor;
+      costAvoidFlat +
+      costAvoidEvSensitive * lifestyleScale;
 
     const revenue = carbonMid + revenueOther;
     const revenueLow = carbonLow + revenueOther;
@@ -192,8 +194,6 @@ export function projectMultiYear(
   }
 
   const irr = approxIRR(kpis.capexEstimate, rows.map((r) => r.net));
-
-  void baseRevenueWithoutCarbon; // referenced for documentation
 
   return {
     rows,

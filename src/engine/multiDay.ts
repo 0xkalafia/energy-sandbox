@@ -79,55 +79,56 @@ export interface MultiDayResult {
   daily: DaySummary[];
   scenario: WeatherScenario;
   lowestSoC: number;
-  unmetHours: number;
+  unmetHours: number; // hours where CRITICAL load was shed (true blackout)
+  curtailedHours: number; // hours where a FLEXIBLE mission was curtailed
+  unmetGWh: number; // total critical energy not served
+  curtailedGWh: number; // total flexible energy curtailed
   importTotalGWh: number;
 }
 
+export interface MultiDayOpts {
+  /** Islanded stress test: cap grid import per hour (MW). Default Infinity
+   *  (grid-backed). 0 = fully islanded. */
+  gridLimitMW?: number;
+  /** Battery SoC fraction at the very start of day 0 (0..1). Default 0.5. */
+  startSoC?: number;
+}
+
 /**
- * Run the engine for `days` consecutive 24-hour windows, carrying battery
- * state of charge across day boundaries. Returns hourly trace + daily summary.
+ * Run the engine for `days` consecutive 24-hour windows, **truly carrying**
+ * battery state of charge across day boundaries: day N starts exactly where
+ * day N-1 ended (no visual stitching — the dispatch sees the real SoC). This
+ * is what lets a multi-day monsoon streak genuinely deplete the battery and
+ * surface unmet (blackout) hours.
  */
 export function simulateMultiDay(
   inputs: SimInputs,
   days: number,
   scenario: WeatherScenario,
+  opts: MultiDayOpts = {},
 ): MultiDayResult {
   const seasonSeq = buildSeasonSequence(scenario, inputs.season, days);
+  const gridLimitMW = opts.gridLimitMW ?? Infinity;
 
   const allHours: MultiDayPoint[] = [];
   const daily: DaySummary[] = [];
 
-  // Pre-simulate day 0 to get an "initial" battery state via simulateDay's
-  // own assumption (50% start). Then chain by overriding the battery start.
-  // simulateDay always starts at 50%, so we can't truly chain unless we
-  // accept that limitation. To preserve continuity, we shift the array by
-  // SoC offset after each day.
-  //
-  // Workaround: simulate each day and then re-anchor SoC so that day N
-  // begins where day N-1 ended. Then re-compute battery dispatch in a
-  // second pass using a "starting SoC" parameter.
-
-  // For MVP we accept the simpler model: each day simulates independently
-  // from 50% SoC, but we record the trajectory. Carry-over is approximated
-  // by stitching: shift each day's SoC curve so it visually continues.
-
-  let carrySoCOffset = 0;
+  let carrySoC = clamp(opts.startSoC ?? 0.5, 0, 1); // real SoC handed day→day
   let cumulativeMinSoC = 1;
-  let cumulativeUnmet = 0;
+  let unmetHours = 0;
+  let curtailedHours = 0;
+  let unmetGWh = 0;
+  let curtailedGWh = 0;
   let cumulativeImport = 0;
 
   for (let d = 0; d < days; d++) {
     const daySeason = seasonSeq[d];
     const dayInputs = { ...inputs, season: daySeason };
-    const dayHourly = simulateDay(dayInputs);
-
-    // Apply visual continuity: shift SoC so day d starts where day d-1 ended
-    const dayStartSoC = dayHourly[0].batterySoC;
-    const dayEndSoC = dayHourly[dayHourly.length - 1].batterySoC;
-
-    if (d > 0) {
-      carrySoCOffset += -dayStartSoC + (allHours[allHours.length - 1].batterySoC);
-    }
+    // Chain: this day starts at the previous day's ending SoC.
+    const dayHourly = simulateDay(dayInputs, {
+      startSoC: carrySoC,
+      gridLimitMW,
+    });
 
     let supplyGWh = 0;
     let demandGWh = 0;
@@ -137,16 +138,9 @@ export function simulateMultiDay(
 
     for (let h = 0; h < 24; h++) {
       const point = dayHourly[h];
-      const stitchedSoC = clamp(
-        point.batterySoC + carrySoCOffset,
-        0,
-        1,
-      );
-      const isUnmet = point.unmet > 0;
 
       allHours.push({
         ...point,
-        batterySoC: stitchedSoC,
         globalHour: d * 24 + h,
         day: d,
         daySeason,
@@ -156,9 +150,19 @@ export function simulateMultiDay(
       demandGWh += point.totalDemand / 1000;
       importGWh += point.gridImport / 1000;
       exportGWh += point.gridExport / 1000;
-      if (stitchedSoC < minSoC) minSoC = stitchedSoC;
-      if (isUnmet) cumulativeUnmet += 1;
+      if (point.batterySoC < minSoC) minSoC = point.batterySoC;
+      if (point.unmet > 1e-6) {
+        unmetHours += 1;
+        unmetGWh += point.unmet / 1000;
+      }
+      if (point.curtailed > 1e-6) {
+        curtailedHours += 1;
+        curtailedGWh += point.curtailed / 1000;
+      }
     }
+
+    // Hand the true ending SoC to the next day.
+    carrySoC = dayHourly[dayHourly.length - 1].batterySoC;
 
     cumulativeImport += importGWh;
     if (minSoC < cumulativeMinSoC) cumulativeMinSoC = minSoC;
@@ -171,7 +175,7 @@ export function simulateMultiDay(
       importGWh,
       exportGWh,
       minSoC,
-      endSoC: clamp(dayEndSoC + carrySoCOffset, 0, 1),
+      endSoC: carrySoC,
     });
   }
 
@@ -180,7 +184,10 @@ export function simulateMultiDay(
     daily,
     scenario,
     lowestSoC: cumulativeMinSoC,
-    unmetHours: cumulativeUnmet,
+    unmetHours,
+    curtailedHours,
+    unmetGWh,
+    curtailedGWh,
     importTotalGWh: cumulativeImport,
   };
 }

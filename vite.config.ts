@@ -11,4 +11,26 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split heavy charting/d3 + React into cached vendor chunks so the
+        // main bundle (app logic) stays lean. (rolldown-vite expects the
+        // function form of manualChunks.)
+        manualChunks(id: string) {
+          if (
+            id.includes('recharts') ||
+            id.includes('d3-') ||
+            id.includes('victory-vendor')
+          ) {
+            return 'recharts'
+          }
+          if (id.includes('react-dom') || id.includes('/node_modules/react/')) {
+            return 'vendor'
+          }
+          return undefined
+        },
+      },
+    },
+  },
 })

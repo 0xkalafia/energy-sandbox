@@ -88,11 +88,6 @@ export default function App() {
     }
   };
 
-  // Wrap setInputs so we can toast on preset changes
-  const setInputsWithToast = (next: typeof inputs) => {
-    setInputs(next);
-  };
-
   // Global keyboard shortcuts
   useKeyboardShortcuts({
     onCommandK: () => setPaletteOpen((o) => !o),
@@ -147,7 +142,7 @@ export default function App() {
 
       {/* Desktop sidebar (lg and up) */}
       <div className="hidden lg:flex lg:h-full lg:w-[340px] lg:shrink-0">
-        <Sidebar inputs={inputs} setInputs={setInputsWithToast} />
+        <Sidebar inputs={inputs} setInputs={setInputs} />
       </div>
 
       {/* Mobile drawer */}
@@ -160,7 +155,7 @@ export default function App() {
           <div className="fixed inset-y-0 left-0 z-50 w-[88vw] max-w-[360px] lg:hidden">
             <Sidebar
               inputs={inputs}
-              setInputs={setInputsWithToast}
+              setInputs={setInputs}
               onClose={() => setDrawerOpen(false)}
             />
           </div>
@@ -226,7 +221,7 @@ export default function App() {
               </button>
               <Badge tone="emerald">Live</Badge>
               <Badge tone="neutral" className="hidden sm:inline-flex">
-                v0.2
+                v0.3
               </Badge>
             </div>
           </div>
@@ -404,7 +399,7 @@ function FinanceBreakdown({ kpis: p }: { kpis: import("@/data/types").KPIs }) {
           </div>
           <div className="mt-1 flex items-center justify-between">
             <span className="text-[11px] text-[var(--color-fg-muted)]">
-              Payback period
+              Simple payback (yr-1)
             </span>
             <span className="tabular text-[11px] font-medium">
               {p.paybackYears.toFixed(1)} ปี

@@ -23,6 +23,9 @@ export interface SimInputs {
   dacTargetMtPerYear: number; // million tonnes CO2 captured per year
   methanolOn: boolean;
   methanolKtPerYear: number; // thousand tonnes E-methanol per year
+  /** 0..1 — share of methanol used locally (displaces fuel) vs exported (sold).
+   *  Prevents double-counting: a ton is EITHER sold OR burned locally, not both. */
+  methanolLocalShare: number;
   dataCenterOn: boolean;
   dataCenterMW: number;
   desalOn: boolean;
@@ -66,13 +69,14 @@ export interface HourlyPoint {
   wwt: number;
   // derived (MW)
   totalSupply: number;
-  totalDemand: number;
+  totalDemand: number; // = critical + flexible WANT level (before curtailment)
   net: number; // supply - demand
   batterySoC: number; // 0..1
   batteryFlow: number; // + charging, - discharging (MW)
   gridImport: number; // MW (>=0)
   gridExport: number; // MW (>=0)
-  unmet: number; // MW (>=0) — load shedding when battery empty + no grid help
+  unmet: number; // MW (>=0) — CRITICAL load shed (true blackout) after battery+grid exhausted
+  curtailed: number; // MW (>=0) — FLEXIBLE mission load curtailed (interruptible, not a blackout)
 }
 
 export interface KPIs {
@@ -95,9 +99,12 @@ export interface KPIs {
   yearlyCaptureTon: number; // CO2 captured by DAC
   netCarbonTon: number;
   carbonCreditRevenue: number; // baht
-  methanolRevenue: number; // baht
+  methanolRevenue: number; // baht (export share only)
   dcLeasingRevenue: number; // baht
   costAvoidance: number; // baht (fuel+electricity not bought)
+  /** Portion of costAvoidance that scales with EV adoption (lifestyle electricity).
+   *  multiYear scales only this part year-over-year, not desal/waste/wwt. */
+  costAvoidanceEvSensitive: number; // baht
   /** Phase 3.4: co-products from green H2 production (O2 + waste heat) */
   hydrogenCoProductRevenue: number; // baht
   oxygenTonPerYear: number; // tonnes O2 produced as by-product

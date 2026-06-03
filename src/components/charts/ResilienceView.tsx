@@ -29,10 +29,14 @@ interface Props {
 export function ResilienceView({ inputs }: Props) {
   const [scenario, setScenario] = useState<WeatherScenario>("monsoonStreak");
   const [days, setDays] = useState(7);
+  const [islanded, setIslanded] = useState(true);
 
   const result = useMemo(
-    () => simulateMultiDay(inputs, days, scenario),
-    [inputs, days, scenario],
+    () =>
+      simulateMultiDay(inputs, days, scenario, {
+        gridLimitMW: islanded ? 0 : Infinity,
+      }),
+    [inputs, days, scenario, islanded],
   );
 
   return (
@@ -43,29 +47,54 @@ export function ResilienceView({ inputs }: Props) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <CardTitle>Resilience scenario</CardTitle>
-              <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
-                Run engine across consecutive days — battery state visually
-                stitches across boundaries
+              <p className="mt-1 max-w-md text-[11px] text-[var(--color-fg-subtle)]">
+                Battery SoC carried day-to-day (real chaining). In islanded mode
+                missions curtail first; a blackout (unmet) only happens when
+                critical load can't be served.
               </p>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                Days
-              </span>
-              {[5, 7, 14, 30].map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setDays(d)}
-                  className={cn(
-                    "tabular rounded-md border px-2 py-1 text-[11px]",
-                    days === d
-                      ? "border-[var(--color-emerald-glow)]/40 bg-[var(--color-emerald-glow)]/10 text-[var(--color-fg)]"
-                      : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",
-                  )}
-                >
-                  {d}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Grid mode */}
+              <div className="flex items-center gap-1.5">
+                {(
+                  [
+                    { id: true, label: "Islanded" },
+                    { id: false, label: "Grid-backed" },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={String(m.id)}
+                    onClick={() => setIslanded(m.id)}
+                    className={cn(
+                      "rounded-md border px-2 py-1 text-[11px]",
+                      islanded === m.id
+                        ? "border-[var(--color-rose-glow)]/40 bg-[var(--color-rose-glow)]/10 text-[var(--color-fg)]"
+                        : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
+                  Days
+                </span>
+                {[5, 7, 14, 30].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setDays(d)}
+                    className={cn(
+                      "tabular rounded-md border px-2 py-1 text-[11px]",
+                      days === d
+                        ? "border-[var(--color-emerald-glow)]/40 bg-[var(--color-emerald-glow)]/10 text-[var(--color-fg)]"
+                        : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",
+                    )}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -99,22 +128,25 @@ export function ResilienceView({ inputs }: Props) {
         <KPIBox
           label="Lowest SoC"
           value={`${(result.lowestSoC * 100).toFixed(0)}%`}
-          tone={result.lowestSoC < 0.15 ? "rose" : "emerald"}
+          tone={result.lowestSoC <= inputs.batteryDoDFloor + 0.001 ? "rose" : "emerald"}
         />
         <KPIBox
-          label="Unmet hours"
+          label="Blackout hours"
           value={result.unmetHours.toString()}
+          hint={`${result.unmetGWh.toFixed(1)} GWh critical shed`}
           tone={result.unmetHours > 0 ? "rose" : "emerald"}
         />
         <KPIBox
-          label="Grid import (total)"
-          value={`${result.importTotalGWh.toFixed(1)} GWh`}
-          tone={result.importTotalGWh > days * 3 ? "amber" : "sky"}
+          label="Mission curtailed"
+          value={`${result.curtailedHours} hr`}
+          hint={`${result.curtailedGWh.toFixed(1)} GWh deferred`}
+          tone={result.curtailedHours > 0 ? "amber" : "emerald"}
         />
         <KPIBox
-          label="Days simulated"
-          value={`${days} วัน`}
-          tone="violet"
+          label={islanded ? "Grid import" : "Grid import (total)"}
+          value={`${result.importTotalGWh.toFixed(1)} GWh`}
+          hint={islanded ? "islanded → no grid" : undefined}
+          tone={islanded ? "violet" : result.importTotalGWh > days * 3 ? "amber" : "sky"}
         />
       </div>
 
@@ -123,7 +155,8 @@ export function ResilienceView({ inputs }: Props) {
         <CardHeader>
           <CardTitle>Battery state of charge — continuous</CardTitle>
           <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
-            SoC stitched across day boundaries — red zone = below DoD floor
+            SoC carried day-to-day (real) — floor line = DoD limit; flat at floor
+            = battery exhausted
           </p>
         </CardHeader>
         <CardContent>
@@ -320,10 +353,12 @@ function KPIBox({
   label,
   value,
   tone,
+  hint,
 }: {
   label: string;
   value: string;
   tone: "emerald" | "rose" | "amber" | "sky" | "violet";
+  hint?: string;
 }) {
   return (
     <Card>
@@ -337,6 +372,11 @@ function KPIBox({
         <p className="tabular mt-1 text-lg font-semibold text-[var(--color-fg)]">
           {value}
         </p>
+        {hint && (
+          <p className="tabular mt-0.5 text-[10px] text-[var(--color-fg-subtle)]">
+            {hint}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

@@ -112,9 +112,11 @@ function computePercentiles(values: number[]): Percentiles {
 export function runMonteCarlo(
   inputs: SimInputs,
   opts: MonteCarloOptions,
+  sim: { gridLimitMW?: number } = {},
 ): MonteCarloResult {
   const rng = makeRng(opts.seed);
   const runs: MonteCarloResult["runs"] = [];
+  const gridLimitMW = sim.gridLimitMW ?? Infinity;
 
   for (let i = 0; i < opts.runs; i++) {
     // Pick a dominant season for this run (most-frequent)
@@ -128,6 +130,7 @@ export function runMonteCarlo(
       { ...inputs, season },
       opts.days,
       scenario,
+      { gridLimitMW },
     );
 
     runs.push({

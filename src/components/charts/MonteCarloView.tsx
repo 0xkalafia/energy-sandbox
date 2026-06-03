@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -13,12 +13,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Field } from "@/components/ui/Field";
 import { Slider } from "@/components/ui/Slider";
-import { fmtPct } from "@/lib/utils";
+import { cn, fmtPct } from "@/lib/utils";
+import { Play, Loader2 } from "lucide-react";
 import {
   DEFAULT_MC,
   histogram,
-  runMonteCarlo,
   type MonteCarloOptions,
+  type MonteCarloResult,
 } from "@/engine/monteCarlo";
 import type { SimInputs } from "@/data/types";
 
@@ -28,54 +29,118 @@ interface Props {
 
 export function MonteCarloView({ inputs }: Props) {
   const [opts, setOpts] = useState<MonteCarloOptions>(DEFAULT_MC);
+  const [islanded, setIslanded] = useState(true);
+  const [result, setResult] = useState<MonteCarloResult | null>(null);
+  const [running, setRunning] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
-  const result = useMemo(() => runMonteCarlo(inputs, opts), [inputs, opts]);
+  const workerRef = useRef<Worker | null>(null);
+
+  // Spin up the worker once.
+  useEffect(() => {
+    const worker = new Worker(
+      new URL("../../engine/mc.worker.ts", import.meta.url),
+      { type: "module" },
+    );
+    worker.onmessage = (e: MessageEvent<MonteCarloResult>) => {
+      setResult(e.data);
+      setRunning(false);
+      setDirty(false);
+    };
+    workerRef.current = worker;
+    // Kick off an initial run with defaults.
+    setRunning(true);
+    worker.postMessage({
+      inputs,
+      opts,
+      gridLimitMW: islanded ? 0 : Number.POSITIVE_INFINITY,
+    });
+    return () => worker.terminate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Any change to inputs/opts/mode marks the current result stale.
+  useEffect(() => {
+    setDirty(true);
+  }, [inputs, opts, islanded]);
+
+  const run = () => {
+    if (!workerRef.current || running) return;
+    setRunning(true);
+    workerRef.current.postMessage({
+      inputs,
+      opts,
+      gridLimitMW: islanded ? 0 : Number.POSITIVE_INFINITY,
+    });
+  };
 
   const update = <K extends keyof MonteCarloOptions>(
     key: K,
     val: MonteCarloOptions[K],
   ) => setOpts({ ...opts, [key]: val });
 
-  const updateWeight = (
-    k: keyof MonteCarloOptions["weights"],
-    val: number,
-  ) => setOpts({ ...opts, weights: { ...opts.weights, [k]: val / 100 } });
-
-  // Histograms — bucketed for chart
-  const socHist = histogram(
-    result.runs.map((r) => r.lowestSoC * 100),
-    20,
-    [0, 100],
-  );
-  const importHist = histogram(
-    result.runs.map((r) => r.importGWh),
-    20,
-  );
-
-  const p = result.percentiles;
+  const updateWeight = (k: keyof MonteCarloOptions["weights"], val: number) =>
+    setOpts({ ...opts, weights: { ...opts.weights, [k]: val / 100 } });
 
   return (
     <div className="space-y-6">
       {/* Controls */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <CardTitle>Monte Carlo simulation</CardTitle>
-              <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
-                Run N stochastic weather realizations · see P5/P50/P95 distribution
+              <p className="mt-1 max-w-md text-[11px] text-[var(--color-fg-subtle)]">
+                N stochastic weather realizations, run off-thread. Islanded mode
+                makes blackout risk meaningful (grid can't paper over deficits).
               </p>
             </div>
-            <Badge tone="violet">{result.runs.length} runs</Badge>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                {(
+                  [
+                    { id: true, label: "Islanded" },
+                    { id: false, label: "Grid-backed" },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={String(m.id)}
+                    onClick={() => setIslanded(m.id)}
+                    className={cn(
+                      "rounded-md border px-2 py-1 text-[11px]",
+                      islanded === m.id
+                        ? "border-[var(--color-rose-glow)]/40 bg-[var(--color-rose-glow)]/10 text-[var(--color-fg)]"
+                        : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={run}
+                disabled={running}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all",
+                  dirty && !running
+                    ? "border-[var(--color-emerald-glow)]/50 bg-[var(--color-emerald-glow)]/10 text-[var(--color-fg)]"
+                    : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",
+                  running && "opacity-60",
+                )}
+              >
+                {running ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+                {running ? "Running…" : dirty ? "Run (stale)" : "Run"}
+              </button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <Field
-              label="Runs"
-              value={`${opts.runs}`}
-              hint="จำนวน realizations"
-            >
+            <Field label="Runs" value={`${opts.runs}`} hint="จำนวน realizations">
               <Slider
                 value={opts.runs}
                 onChange={(v) => update("runs", v)}
@@ -84,11 +149,7 @@ export function MonteCarloView({ inputs }: Props) {
                 step={10}
               />
             </Field>
-            <Field
-              label="Days per run"
-              value={`${opts.days}`}
-              hint="ระยะเวลาแต่ละ run"
-            >
+            <Field label="Days per run" value={`${opts.days}`} hint="ระยะเวลาแต่ละ run">
               <Slider
                 value={opts.days}
                 onChange={(v) => update("days", v)}
@@ -97,11 +158,7 @@ export function MonteCarloView({ inputs }: Props) {
                 step={1}
               />
             </Field>
-            <Field
-              label="Seed"
-              value={`${opts.seed}`}
-              hint="เปลี่ยนเพื่อ resample"
-            >
+            <Field label="Seed" value={`${opts.seed}`} hint="เปลี่ยนเพื่อ resample">
               <Slider
                 value={opts.seed}
                 onChange={(v) => update("seed", v)}
@@ -112,21 +169,24 @@ export function MonteCarloView({ inputs }: Props) {
             </Field>
             <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-hover)]/40 p-3">
               <p className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                Unmet risk
+                Blackout risk
               </p>
               <p
-                className={`tabular mt-1 text-lg font-semibold ${
-                  result.unmetRiskPct > 0.1
-                    ? "text-[var(--color-rose-glow)]"
-                    : result.unmetRiskPct > 0
-                      ? "text-[var(--color-amber-glow)]"
-                      : "text-[var(--color-emerald-glow)]"
-                }`}
+                className={cn(
+                  "tabular mt-1 text-lg font-semibold",
+                  !result
+                    ? "text-[var(--color-fg-subtle)]"
+                    : result.unmetRiskPct > 0.1
+                      ? "text-[var(--color-rose-glow)]"
+                      : result.unmetRiskPct > 0
+                        ? "text-[var(--color-amber-glow)]"
+                        : "text-[var(--color-emerald-glow)]",
+                )}
               >
-                {fmtPct(result.unmetRiskPct)}
+                {result ? fmtPct(result.unmetRiskPct) : "—"}
               </p>
               <p className="mt-0.5 text-[10px] text-[var(--color-fg-subtle)]">
-                % runs ที่มี hour ไฟดับ
+                % runs ที่มี critical shed
               </p>
             </div>
           </div>
@@ -136,10 +196,7 @@ export function MonteCarloView({ inputs }: Props) {
               Season weights (sampled per run)
             </p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field
-                label="ร้อน"
-                value={fmtPct(opts.weights.summer)}
-              >
+              <Field label="ร้อน" value={fmtPct(opts.weights.summer)}>
                 <Slider
                   value={opts.weights.summer * 100}
                   onChange={(v) => updateWeight("summer", v)}
@@ -176,12 +233,52 @@ export function MonteCarloView({ inputs }: Props) {
         </CardContent>
       </Card>
 
+      {result ? (
+        <MCResults result={result} runCount={result.runs.length} />
+      ) : (
+        <Card>
+          <CardContent className="flex h-40 items-center justify-center text-sm text-[var(--color-fg-muted)]">
+            {running ? "กำลังรัน Monte Carlo…" : "กด Run เพื่อเริ่มจำลอง"}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function MCResults({
+  result,
+  runCount,
+}: {
+  result: MonteCarloResult;
+  runCount: number;
+}) {
+  const p = result.percentiles;
+  const socHist = histogram(
+    result.runs.map((r) => r.lowestSoC * 100),
+    20,
+    [0, 100],
+  );
+  const importHist = histogram(
+    result.runs.map((r) => r.importGWh),
+    20,
+  );
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] text-[var(--color-fg-subtle)]">
+          {runCount} realizations · percentiles below
+        </p>
+        <Badge tone="violet">{runCount} runs</Badge>
+      </div>
+
       {/* Percentile KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         <Pctile label="Lowest SoC · P5" value={`${(p.lowestSoC.p5 * 100).toFixed(0)}%`} tone="rose" />
         <Pctile label="P50 (median)" value={`${(p.lowestSoC.p50 * 100).toFixed(0)}%`} tone="violet" />
         <Pctile label="P95" value={`${(p.lowestSoC.p95 * 100).toFixed(0)}%`} tone="emerald" />
-        <Pctile label="Unmet hrs · P50" value={`${p.unmetHours.p50.toFixed(0)}`} tone={p.unmetHours.p50 > 0 ? "rose" : "emerald"} />
+        <Pctile label="Blackout hrs · P50" value={`${p.unmetHours.p50.toFixed(0)}`} tone={p.unmetHours.p50 > 0 ? "rose" : "emerald"} />
         <Pctile label="P95" value={`${p.unmetHours.p95.toFixed(0)}`} tone={p.unmetHours.p95 > 0 ? "rose" : "emerald"} />
         <Pctile label="Import GWh · P50" value={p.importGWh.p50.toFixed(1)} tone="sky" />
       </div>
@@ -195,11 +292,7 @@ export function MonteCarloView({ inputs }: Props) {
           </p>
         </CardHeader>
         <CardContent>
-          <HistogramChart
-            data={socHist}
-            unit="%"
-            redBelow={10}
-          />
+          <HistogramChart data={socHist} unit="%" redBelow={10} />
         </CardContent>
       </Card>
 
@@ -215,7 +308,7 @@ export function MonteCarloView({ inputs }: Props) {
           <HistogramChart data={importHist} unit=" GWh" />
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }
 

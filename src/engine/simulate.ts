@@ -107,7 +107,28 @@ export function computeDemandSizes(i: SimInputs): DemandSizes {
 
 // ---------- Hourly simulation ----------
 
-export function simulateDay(i: SimInputs): HourlyPoint[] {
+export interface DispatchOpts {
+  /** Initial state of charge fraction (0..1). Default 0.5. */
+  startSoC?: number;
+  /**
+   * Max grid import per hour (MW). Default Infinity = grid-backed (normal ops:
+   * grid is the backstop, nothing is ever shed). A finite value models an
+   * islanded / capped-interconnect stress test: once supply + battery + the
+   * capped grid are exhausted, FLEXIBLE missions curtail and, in the worst
+   * case, CRITICAL load is shed (true blackout → `unmet`).
+   */
+  gridLimitMW?: number;
+}
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+export function simulateDay(
+  i: SimInputs,
+  opts: DispatchOpts = {},
+): HourlyPoint[] {
+  const startSoC = clamp01(opts.startSoC ?? 0.5);
+  const gridLimit = opts.gridLimitMW ?? Infinity;
+
   const cf = CF_BY_SEASON[i.season];
 
   // Daily energy from each source (GWh)
@@ -138,58 +159,68 @@ export function simulateDay(i: SimInputs): HourlyPoint[] {
   const batteryCapMWh = i.batteryGWh * 1000;
   const minSoC = i.batteryDoDFloor;
   const maxSoC = 1.0;
-  // Start at 50% (neutral state)
-  let socMWh = batteryCapMWh * 0.5;
-  const sqrtRT = Math.sqrt(i.batteryRoundTrip); // split loss between charge & discharge
-
-  // Max battery power (assume 1C = full GWh per hour for now — generous)
-  // More realistic: 0.25C. Use 0.25C for MVP.
-  const maxBatteryMW = batteryCapMWh * 0.25;
+  let socMWh = batteryCapMWh * startSoC;
+  const sqrtRT = Math.sqrt(i.batteryRoundTrip); // split loss across charge & discharge
+  const maxBatteryMW = batteryCapMWh * 0.25; // 0.25C power rating
 
   const out: HourlyPoint[] = [];
   for (let h = 0; h < 24; h++) {
-    const totalSupply = solar[h] + wind[h] + biomass[h] + hydro[h];
-    const totalDemand =
-      lifestyle[h] +
-      dac[h] +
-      methanol[h] +
-      dataCenter[h] +
-      desal[h] +
-      waste[h] +
-      wwt[h];
-    const net = totalSupply - totalDemand; // + = surplus, - = deficit
+    const supply = solar[h] + wind[h] + biomass[h] + hydro[h];
+    const critical = lifestyle[h]; // must-serve
+    const flexibleWant =
+      dac[h] + methanol[h] + dataCenter[h] + desal[h] + waste[h] + wwt[h];
+    const totalDemand = critical + flexibleWant;
 
-    let batteryFlow = 0; // +ve = charging, -ve = discharging
+    // Per-hour dispatch budgets
+    let s = supply; // remaining renewable supply to allocate
+    const dischargeableMWh = Math.max(0, socMWh - batteryCapMWh * minSoC);
+    let dischargeBudget = Math.min(maxBatteryMW, dischargeableMWh * sqrtRT); // MW delivered
+    let gridBudget = gridLimit;
+
+    let batteryDischargeMW = 0;
     let gridImport = 0;
-    let gridExport = 0;
     let unmet = 0;
+    let curtailed = 0;
 
-    if (net > 0) {
-      // Surplus → charge battery, then export
+    // Serve a load tier through the merit order: supply → battery → grid → shed.
+    // CRITICAL is served first so it gets battery/grid priority; FLEXIBLE only
+    // gets what's left and is curtailed (not blacked out) when scarce.
+    const serve = (want: number, isCritical: boolean) => {
+      let rem = want;
+      const fromSupply = Math.min(rem, s);
+      s -= fromSupply;
+      rem -= fromSupply;
+      const fromBatt = Math.min(rem, dischargeBudget);
+      dischargeBudget -= fromBatt;
+      batteryDischargeMW += fromBatt;
+      rem -= fromBatt;
+      const fromGrid = Math.min(rem, gridBudget);
+      gridBudget -= fromGrid;
+      gridImport += fromGrid;
+      rem -= fromGrid;
+      if (rem > 1e-9) {
+        if (isCritical) unmet += rem;
+        else curtailed += rem;
+      }
+    };
+
+    serve(critical, true);
+    serve(flexibleWant, false);
+
+    // Surplus supply → charge battery → export
+    let batteryChargeMW = 0;
+    let gridExport = 0;
+    if (s > 0) {
       const headroom = Math.max(0, batteryCapMWh * maxSoC - socMWh);
-      const wantCharge = Math.min(net, maxBatteryMW, headroom / sqrtRT);
-      const actuallyStored = wantCharge * sqrtRT;
-      socMWh += actuallyStored;
-      batteryFlow = wantCharge;
-      gridExport = net - wantCharge;
-    } else if (net < 0) {
-      // Deficit → discharge battery, then import grid, then unmet
-      const deficit = -net;
-      const available = Math.max(0, socMWh - batteryCapMWh * minSoC);
-      const wantDischarge = Math.min(
-        deficit,
-        maxBatteryMW,
-        available * sqrtRT,
-      );
-      const drawnFromCell = wantDischarge / sqrtRT;
-      socMWh -= drawnFromCell;
-      batteryFlow = -wantDischarge;
-      const stillNeed = deficit - wantDischarge;
-      // After battery, we let grid cover the rest (assume grid is always available
-      // unless user wants to model islanded operation later).
-      gridImport = stillNeed;
-      unmet = 0;
+      const charge = Math.min(s, maxBatteryMW, headroom / sqrtRT);
+      batteryChargeMW = charge;
+      gridExport = s - charge;
     }
+
+    // Apply energy changes to the cell
+    socMWh += batteryChargeMW * sqrtRT;
+    socMWh -= batteryDischargeMW / sqrtRT;
+    socMWh = Math.max(0, Math.min(batteryCapMWh, socMWh));
 
     out.push({
       hour: h,
@@ -204,14 +235,15 @@ export function simulateDay(i: SimInputs): HourlyPoint[] {
       desal: desal[h],
       waste: waste[h],
       wwt: wwt[h],
-      totalSupply,
+      totalSupply: supply,
       totalDemand,
-      net,
+      net: supply - totalDemand,
       batterySoC: socMWh / batteryCapMWh,
-      batteryFlow,
+      batteryFlow: batteryChargeMW - batteryDischargeMW,
       gridImport,
       gridExport,
       unmet,
+      curtailed,
     });
   }
   return out;
@@ -255,9 +287,20 @@ export function computeKPIs(i: SimInputs, hourly: HourlyPoint[]): KPIs {
   const netCarbon = grossEmission - capturedTon;
 
   const carbonCreditRev = capturedTon * i.carbonPrice * USD_TO_THB;
-  const methanolRev = i.methanolOn
-    ? i.methanolKtPerYear * 1e3 * i.methanolPrice * USD_TO_THB
-    : 0;
+
+  // Methanol: a ton is EITHER exported (sold at methanolPrice) OR used locally
+  // (displaces fuel) — never both. `methanolLocalShare` splits the tonnage so
+  // export revenue and fuel-saving don't double-count the same molecules.
+  const methanolTons = i.methanolOn ? i.methanolKtPerYear * 1e3 : 0;
+  const localShare = clamp01(i.methanolLocalShare);
+  const methanolExportTons = methanolTons * (1 - localShare);
+  const methanolLocalTons = methanolTons * localShare;
+
+  const methanolRev = methanolExportTons * i.methanolPrice * USD_TO_THB;
+  // Fuel avoidance only for the locally-consumed share (rough: 600 L-equiv per
+  // ton methanol at ~50% of diesel energy density).
+  const fuelSaving = methanolLocalTons * 600 * (i.fuelPrice * 0.5);
+
   // MW × hr × days = MWh; × 1000 = kWh; × baht/kWh = baht; × 0.4 = lease take-rate
   const dcLeasingRev = i.dataCenterOn
     ? i.dataCenterMW *
@@ -268,20 +311,15 @@ export function computeKPIs(i: SimInputs, hourly: HourlyPoint[]): KPIs {
       0.4
     : 0;
 
-  // Cost avoidance: lifestyle + public services × buy price
-  const internalServiceGWh =
-    d.lifestyle * DAYS_PER_YEAR +
-    d.desal * DAYS_PER_YEAR +
-    d.waste * DAYS_PER_YEAR +
-    d.wwt * DAYS_PER_YEAR;
-  const electricitySaving = internalServiceGWh * 1e6 * i.gridBuyPrice;
-  // Fuel avoidance (very rough: methanol displaces fuel)
-  const fuelSaving = i.methanolOn
-    ? i.methanolKtPerYear * 1e3 * 600 * (i.fuelPrice * 0.5)
-    : 0;
-  // (600 L equivalent per ton methanol at ~50% energy density)
+  // Cost avoidance: electricity not bought from grid, split so multiYear can
+  // grow only the EV-sensitive (lifestyle) part year-over-year.
+  const lifestyleSaving = d.lifestyle * DAYS_PER_YEAR * 1e6 * i.gridBuyPrice;
+  const servicesSaving =
+    (d.desal + d.waste + d.wwt) * DAYS_PER_YEAR * 1e6 * i.gridBuyPrice;
+  const electricitySaving = lifestyleSaving + servicesSaving;
 
   const costAvoidance = electricitySaving + fuelSaving;
+  const costAvoidanceEvSensitive = lifestyleSaving;
 
   // Phase 3.4: Hydrogen co-product revenue
   // Stoichiometry: every kg H2 produces 8 kg O2 as by-product.
@@ -346,6 +384,7 @@ export function computeKPIs(i: SimInputs, hourly: HourlyPoint[]): KPIs {
     methanolRevenue: methanolRev,
     dcLeasingRevenue: dcLeasingRev,
     costAvoidance: costAvoidance,
+    costAvoidanceEvSensitive,
     hydrogenCoProductRevenue: hydrogenCoProductRev,
     oxygenTonPerYear: oxygenTon,
     wasteHeatGWhPerYear: wasteHeatGWh,
