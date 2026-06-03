@@ -7,6 +7,7 @@ import { runMonteCarlo, DEFAULT_MC } from "@/engine/monteCarlo";
 import { optimizeResilientMix, DEFAULT_OPT } from "@/engine/optimize";
 import { runFinancialMC, DEFAULT_FIN_MC } from "@/engine/financialMC";
 import { simulateHouse, DEFAULT_HOUSE } from "@/engine/house";
+import { allocate } from "@/data/districts";
 
 describe("simulateDay — hourly dispatch", () => {
   it("returns 24 hourly points", () => {
@@ -262,6 +263,25 @@ describe("simulateHouse (residential)", () => {
     const small = simulateHouse({ ...DEFAULT_HOUSE, solarW: 2000 });
     const big = simulateHouse({ ...DEFAULT_HOUSE, solarW: 8000 });
     expect(big.importKWhDay).toBeLessThanOrEqual(small.importKWhDay);
+  });
+});
+
+describe("district allocation conserves province totals", () => {
+  it("solar / wind / battery sum back to the inputs", () => {
+    const a = allocate(DEFAULT_INPUTS);
+    expect(a).toHaveLength(8);
+    const sum = (f: (x: (typeof a)[number]) => number) =>
+      a.reduce((s, x) => s + f(x), 0);
+    expect(sum((x) => x.solarMW)).toBeCloseTo(DEFAULT_INPUTS.solarMW, 3);
+    expect(sum((x) => x.windMW)).toBeCloseTo(DEFAULT_INPUTS.windMW, 3);
+    expect(sum((x) => x.batteryGWh)).toBeCloseTo(DEFAULT_INPUTS.batteryGWh, 3);
+  });
+
+  it("only Kaeng Krachan hosts hydro", () => {
+    const a = allocate(DEFAULT_INPUTS);
+    const hydroHosts = a.filter((x) => x.hydroMW > 0.01);
+    expect(hydroHosts).toHaveLength(1);
+    expect(hydroHosts[0].d.id).toBe("kaengkrachan");
   });
 });
 

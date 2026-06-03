@@ -61,6 +61,9 @@ const Optimizer = lazy(() =>
 const HouseMode = lazy(() =>
   import("@/components/HouseMode").then((m) => ({ default: m.HouseMode })),
 );
+const SpatialMap = lazy(() =>
+  import("@/components/SpatialMap").then((m) => ({ default: m.SpatialMap })),
+);
 
 export default function App() {
   // Hydrate inputs from URL hash on first render
@@ -314,6 +317,14 @@ export default function App() {
                 fallback={<ChartSkeleton title="Financial MC…" height={300} />}
               >
                 <FinancialMonteCarlo inputs={inputs} />
+              </Suspense>
+            </TabsContent>
+
+            <TabsContent value="map" className="mt-6 space-y-6">
+              <Suspense
+                fallback={<ChartSkeleton title="Map…" height={420} />}
+              >
+                <SpatialMap inputs={inputs} />
               </Suspense>
             </TabsContent>
 

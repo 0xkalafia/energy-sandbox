@@ -14,6 +14,7 @@ export const TABS: TabDef[] = [
   { id: "carbon", label: "Carbon" },
   { id: "finance", label: "Finance" },
   { id: "analysis", label: "Analysis" },
+  { id: "map", label: "Map" },
   { id: "house", label: "🏠 House" },
 ];
 
