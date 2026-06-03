@@ -132,6 +132,36 @@ export function ResilienceView({ inputs }: Props) {
         />
       </div>
 
+      {/* Reliability indices (annualised from this stress window) */}
+      {islanded && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <StatCard
+            label="LOLE"
+            value={`${((result.unmetHours / days) * 365).toFixed(0)} hr/ปี`}
+            sub="loss-of-load expectation"
+            tone={result.unmetHours > 0 ? "rose" : "emerald"}
+          />
+          <StatCard
+            label="EUE"
+            value={`${((result.unmetGWh / days) * 365).toFixed(1)} GWh/ปี`}
+            sub="expected unserved energy"
+            tone={result.unmetGWh > 0 ? "rose" : "emerald"}
+          />
+          <StatCard
+            label="Curtailment"
+            value={`${((result.curtailedGWh / days) * 365).toFixed(0)} GWh/ปี`}
+            sub="missions deferred (annualised)"
+            tone="amber"
+          />
+          <StatCard
+            label="Critical availability"
+            value={`${(100 - (result.unmetHours / (days * 24)) * 100).toFixed(2)}%`}
+            sub="uptime ของ critical load"
+            tone={result.unmetHours === 0 ? "emerald" : "amber"}
+          />
+        </div>
+      )}
+
       {/* SoC trajectory */}
       <Card>
         <CardHeader>

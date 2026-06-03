@@ -123,6 +123,16 @@ export const ENERGY_INTENSITY = {
   wwtLitersPerPersonPerDay: 200,
 } as const;
 
+/** Cooling-driven seasonal multiplier on the residential/lifestyle load.
+ *  Summer A/C pushes demand up; cool/rainy seasons relax it. Missions stay flat.
+ *  (Roughly averages to ~1.0 across the year.) */
+export const DEMAND_SEASON: Record<Season, number> = {
+  summer: 1.2,
+  rainy: 1.0,
+  winter: 0.9,
+  monsoon: 1.0,
+};
+
 /** Capacity factor per source, per season (annual average for daily total). */
 export const CF_BY_SEASON: Record<
   Season,

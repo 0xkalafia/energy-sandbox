@@ -1,6 +1,7 @@
 import type { HourlyPoint, KPIs, SimInputs } from "@/data/types";
 import {
   CF_BY_SEASON,
+  DEMAND_SEASON,
   ENERGY_INTENSITY,
   LIFESTYLE_SHAPE_24H,
   SOLAR_SHAPE_24H,
@@ -144,9 +145,12 @@ export function simulateDay(
   const biomass = Array(24).fill((biomassDailyGWh * 1000) / 24);
   const hydro = Array(24).fill((hydroDailyGWh * 1000) / 24);
 
-  // Demand sizing
+  // Demand sizing — lifestyle load flexes with the season (cooling).
   const d = computeDemandSizes(i);
-  const lifestyle = shapeHourlyMW(d.lifestyle, LIFESTYLE_SHAPE_24H);
+  const lifestyle = shapeHourlyMW(
+    d.lifestyle * DEMAND_SEASON[i.season],
+    LIFESTYLE_SHAPE_24H,
+  );
   // Flexible loads = flat baseline (could be smarter; MVP keeps simple)
   const dac = Array(24).fill((d.dac * 1000) / 24);
   const methanol = Array(24).fill((d.methanol * 1000) / 24);

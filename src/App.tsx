@@ -64,6 +64,16 @@ const HouseMode = lazy(() =>
 const SpatialMap = lazy(() =>
   import("@/components/SpatialMap").then((m) => ({ default: m.SpatialMap })),
 );
+const AnnualViews = lazy(() =>
+  import("@/components/charts/AnnualViews").then((m) => ({
+    default: m.AnnualViews,
+  })),
+);
+const TimeMachine = lazy(() =>
+  import("@/components/charts/TimeMachine").then((m) => ({
+    default: m.TimeMachine,
+  })),
+);
 
 export default function App() {
   // Hydrate inputs from URL hash on first render
@@ -265,6 +275,11 @@ export default function App() {
 
             <TabsContent value="hourly" className="mt-6 space-y-6">
               <HourlyChart hourly={hourly} />
+              <Suspense
+                fallback={<ChartSkeleton title="Annual views…" height={300} />}
+              >
+                <AnnualViews inputs={inputs} />
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="battery" className="mt-6 space-y-6">
@@ -294,6 +309,11 @@ export default function App() {
 
             <TabsContent value="finance" className="mt-6 space-y-6">
               <KPIGrid kpis={kpis} />
+              <Suspense
+                fallback={<ChartSkeleton title="Time machine…" height={300} />}
+              >
+                <TimeMachine inputs={inputs} />
+              </Suspense>
               <Suspense
                 fallback={<ChartSkeleton title="Multi-year cashflow…" height={340} />}
               >

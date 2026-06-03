@@ -8,6 +8,8 @@ import { optimizeResilientMix, DEFAULT_OPT } from "@/engine/optimize";
 import { runFinancialMC, DEFAULT_FIN_MC } from "@/engine/financialMC";
 import { simulateHouse, DEFAULT_HOUSE } from "@/engine/house";
 import { allocate } from "@/data/districts";
+import { timeline, inputsForYear, START_YEAR, END_YEAR } from "@/engine/timeMachine";
+import { annualGrid } from "@/engine/annual";
 
 describe("simulateDay — hourly dispatch", () => {
   it("returns 24 hourly points", () => {
@@ -49,6 +51,16 @@ describe("simulateDay — hourly dispatch", () => {
     expect(islandedCurtail).toBeGreaterThan(0);
     // Grid-backed: flexible is always served (grid backstops), so zero curtailment.
     expect(gridCurtail).toBe(0);
+  });
+});
+
+describe("seasonal cooling demand", () => {
+  it("summer lifestyle load exceeds winter (A/C)", () => {
+    const summer = simulateDay({ ...DEFAULT_INPUTS, season: "summer" });
+    const winter = simulateDay({ ...DEFAULT_INPUTS, season: "winter" });
+    const sumLife = summer.reduce((a, h) => a + h.lifestyle, 0);
+    const winLife = winter.reduce((a, h) => a + h.lifestyle, 0);
+    expect(sumLife).toBeGreaterThan(winLife);
   });
 });
 
@@ -282,6 +294,28 @@ describe("district allocation conserves province totals", () => {
     const hydroHosts = a.filter((x) => x.hydroMW > 0.01);
     expect(hydroHosts).toHaveLength(1);
     expect(hydroHosts[0].d.id).toBe("kaengkrachan");
+  });
+});
+
+describe("time machine build-out", () => {
+  it("end year matches the plan; start year is the small 2026 baseline", () => {
+    const planEnd = inputsForYear(DEFAULT_INPUTS, END_YEAR);
+    const start = inputsForYear(DEFAULT_INPUTS, START_YEAR);
+    expect(planEnd.solarMW).toBeCloseTo(DEFAULT_INPUTS.solarMW, 0);
+    expect(start.solarMW).toBeLessThan(DEFAULT_INPUTS.solarMW * 0.3);
+  });
+  it("capacity grows monotonically over the timeline", () => {
+    const t = timeline(DEFAULT_INPUTS);
+    expect(t).toHaveLength(END_YEAR - START_YEAR + 1);
+    for (let i = 1; i < t.length; i++) {
+      expect(t[i].capacityMW).toBeGreaterThanOrEqual(t[i - 1].capacityMW - 1);
+    }
+  });
+});
+
+describe("annual grid", () => {
+  it("produces 12×24 cells", () => {
+    expect(annualGrid(DEFAULT_INPUTS)).toHaveLength(288);
   });
 });
 
