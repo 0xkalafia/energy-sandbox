@@ -35,12 +35,26 @@ export function MonteCarloView({ inputs }: Props) {
   const [opts, setOpts] = useState<MonteCarloOptions>(DEFAULT_MC);
   const [islanded, setIslanded] = useState(true);
   const [result, setResult] = useState<MonteCarloResult | null>(null);
-  const [running, setRunning] = useState(false);
-  const [dirty, setDirty] = useState(false);
+  // The mount effect kicks off a run immediately, so start in the running state
+  // rather than setting it from inside the effect (cascading render).
+  const [running, setRunning] = useState(true);
+
+  // Identity of the scenario currently on screen. "Stale" is *derived* from
+  // comparing it with the live inputs — no effect needed to track it.
+  const runKey = JSON.stringify({ inputs, opts, islanded });
+  const [shownKey, setShownKey] = useState(runKey);
+  const dirty = shownKey !== runKey;
 
   const workerRef = useRef<Worker | null>(null);
+  // Latest request params, so the mount effect can post without depending on
+  // props (and without re-creating the worker when they change). Refreshed in
+  // an effect — refs must not be written during render.
+  const pending = useRef({ inputs, opts, islanded, runKey });
+  useEffect(() => {
+    pending.current = { inputs, opts, islanded, runKey };
+  });
 
-  // Spin up the worker once.
+  // Spin up the worker once and kick off the initial run.
   useEffect(() => {
     const worker = new Worker(
       new URL("../../engine/mc.worker.ts", import.meta.url),
@@ -49,28 +63,23 @@ export function MonteCarloView({ inputs }: Props) {
     worker.onmessage = (e: MessageEvent<MonteCarloResult>) => {
       setResult(e.data);
       setRunning(false);
-      setDirty(false);
     };
     workerRef.current = worker;
-    // Kick off an initial run with defaults.
-    setRunning(true);
+    // shownKey already starts at the mount-time runKey via useState, so the
+    // initial run is "fresh" without touching state here.
+    const p = pending.current;
     worker.postMessage({
-      inputs,
-      opts,
-      gridLimitMW: islanded ? 0 : Number.POSITIVE_INFINITY,
+      inputs: p.inputs,
+      opts: p.opts,
+      gridLimitMW: p.islanded ? 0 : Number.POSITIVE_INFINITY,
     });
     return () => worker.terminate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Any change to inputs/opts/mode marks the current result stale.
-  useEffect(() => {
-    setDirty(true);
-  }, [inputs, opts, islanded]);
 
   const run = () => {
     if (!workerRef.current || running) return;
     setRunning(true);
+    setShownKey(runKey);
     workerRef.current.postMessage({
       inputs,
       opts,

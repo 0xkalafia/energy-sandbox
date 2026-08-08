@@ -9,6 +9,7 @@ interface Props {
 
 export function KPIGrid({ kpis }: Props) {
   const netZeroStatus = kpis.netCarbonTon <= 0 ? "negative" : kpis.netCarbonTon < 100_000 ? "near" : "positive";
+  const hasBattery = kpis.batteryLifespanYears > 0;
 
   const cards: Array<{
     label: string;
@@ -52,9 +53,11 @@ export function KPIGrid({ kpis }: Props) {
     },
     {
       label: "Battery cycles",
-      value: `${kpis.batteryCyclesPerDay.toFixed(2)}/วัน`,
-      sub: `~${kpis.batteryLifespanYears.toFixed(0)} ปี อายุใช้งาน`,
-      tone: "sky",
+      value: hasBattery ? `${kpis.batteryCyclesPerDay.toFixed(2)}/วัน` : "ไม่มีแบต",
+      sub: hasBattery
+        ? `~${kpis.batteryLifespanYears.toFixed(0)} ปี อายุใช้งาน`
+        : "ตั้งความจุใน sidebar",
+      tone: hasBattery ? "sky" : "neutral",
       icon: <Battery className="h-4 w-4" />,
       info: "discharge รวม/วัน ÷ ความจุ. อายุ = 5,000 cycles ÷ (cycles/วัน × 365), cap ที่ 40 ปี",
     },

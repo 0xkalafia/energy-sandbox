@@ -2,7 +2,13 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
-export const Tabs = TabsPrimitive.Root;
+// Wrapped rather than re-exported so every export in this file is a real
+// component (keeps react-refresh happy and the API identical).
+export function Tabs(
+  props: React.ComponentProps<typeof TabsPrimitive.Root>,
+) {
+  return <TabsPrimitive.Root {...props} />;
+}
 
 export function TabsList({
   children,
@@ -50,4 +56,8 @@ export function TabsTrigger({
   );
 }
 
-export const TabsContent = TabsPrimitive.Content;
+export function TabsContent(
+  props: React.ComponentProps<typeof TabsPrimitive.Content>,
+) {
+  return <TabsPrimitive.Content {...props} />;
+}

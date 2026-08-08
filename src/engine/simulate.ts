@@ -1,9 +1,11 @@
 import type { HourlyPoint, KPIs, SimInputs } from "@/data/types";
 import {
+  ANNUAL_DEMAND_FACTOR,
   CF_BY_SEASON,
   DEMAND_SEASON,
   ENERGY_INTENSITY,
   LIFESTYLE_SHAPE_24H,
+  PLANT_REFERENCE,
   SOLAR_SHAPE_24H,
   USD_TO_THB,
   WIND_SHAPE_24H,
@@ -83,7 +85,10 @@ export function computeDemandSizes(i: SimInputs): DemandSizes {
     : 0;
   // (population L/day × days = liters/year, /1000 = m³/year, × kWh/m³ /1e6 = GWh)
 
-  const lifestyleAnnualGWh = i.lifestyleGWhPerDay * DAYS_PER_YEAR;
+  // Annual lifestyle energy carries the year-average cooling factor, matching
+  // what simulateDay applies per season (otherwise daily×365 ≠ yearly).
+  const lifestyleAnnualGWh =
+    i.lifestyleGWhPerDay * ANNUAL_DEMAND_FACTOR * DAYS_PER_YEAR;
 
   const totalAnnualGWh =
     lifestyleAnnualGWh +
@@ -159,12 +164,15 @@ export function simulateDay(
   const waste = Array(24).fill((d.waste * 1000) / 24);
   const wwt = Array(24).fill((d.wwt * 1000) / 24);
 
-  // Battery state
+  // Battery state. Guard the degenerate cases the UI/import can reach:
+  // batteryGWh = 0 (slider min) would make every SoC 0/0 = NaN, and a
+  // round-trip of 0 would divide by zero on discharge.
   const batteryCapMWh = i.batteryGWh * 1000;
+  const hasBattery = batteryCapMWh > 0;
   const minSoC = i.batteryDoDFloor;
   const maxSoC = 1.0;
   let socMWh = batteryCapMWh * startSoC;
-  const sqrtRT = Math.sqrt(i.batteryRoundTrip); // split loss across charge & discharge
+  const sqrtRT = Math.sqrt(Math.max(0.01, i.batteryRoundTrip)); // split loss across charge & discharge
   const maxBatteryMW = batteryCapMWh * 0.25; // 0.25C power rating
 
   const out: HourlyPoint[] = [];
@@ -242,7 +250,7 @@ export function simulateDay(
       totalSupply: supply,
       totalDemand,
       net: supply - totalDemand,
-      batterySoC: socMWh / batteryCapMWh,
+      batterySoC: hasBattery ? socMWh / batteryCapMWh : 0,
       batteryFlow: batteryChargeMW - batteryDischargeMW,
       gridImport,
       gridExport,
@@ -270,16 +278,21 @@ export function computeKPIs(i: SimInputs, hourly: HourlyPoint[]): KPIs {
     0,
   );
   const batteryCapMWh = i.batteryGWh * 1000;
-  const cyclesPerDay = totalDischargeMWh / batteryCapMWh;
+  const hasBattery = batteryCapMWh > 0;
+  const cyclesPerDay = hasBattery ? totalDischargeMWh / batteryCapMWh : 0;
 
   const socs = hourly.map((h) => h.batterySoC);
-  const minSoC = Math.min(...socs);
-  const maxSoC = Math.max(...socs);
+  const minSoC = hasBattery ? Math.min(...socs) : 0;
+  const maxSoC = hasBattery ? Math.max(...socs) : 0;
 
-  // Sodium-ion typical: 5000 cycles → lifespan
+  // Sodium-ion typical: 5000 cycles → lifespan. With no battery there is no
+  // lifespan to report (0), and an idle battery would last "forever" (capped).
   const SOLID_CYCLES = 5000;
-  const lifespanYears =
-    cyclesPerDay > 0 ? SOLID_CYCLES / (cyclesPerDay * 365) : 99;
+  const lifespanYears = !hasBattery
+    ? 0
+    : cyclesPerDay > 0
+      ? SOLID_CYCLES / (cyclesPerDay * 365)
+      : 99;
 
   // Annual extrapolation (simple: × 365 — could weight by season later)
   const d = computeDemandSizes(i);
@@ -317,7 +330,8 @@ export function computeKPIs(i: SimInputs, hourly: HourlyPoint[]): KPIs {
 
   // Cost avoidance: electricity not bought from grid, split so multiYear can
   // grow only the EV-sensitive (lifestyle) part year-over-year.
-  const lifestyleSaving = d.lifestyle * DAYS_PER_YEAR * 1e6 * i.gridBuyPrice;
+  const lifestyleSaving =
+    d.lifestyle * ANNUAL_DEMAND_FACTOR * DAYS_PER_YEAR * 1e6 * i.gridBuyPrice;
   const servicesSaving =
     (d.desal + d.waste + d.wwt) * DAYS_PER_YEAR * 1e6 * i.gridBuyPrice;
   const electricitySaving = lifestyleSaving + servicesSaving;
@@ -353,17 +367,26 @@ export function computeKPIs(i: SimInputs, hourly: HourlyPoint[]): KPIs {
 
   // CAPEX rough estimate (very simplified)
   // Solar: 25M baht/MW · Wind: 50M baht/MW · Battery: price/kWh × kWh
-  // Plants (DAC/H2/Methanol/Plasma/DC): lump sum
+  // Plants (DAC/H2/Methanol/Plasma/DC): a reference lump sum for the full-plan
+  // throughput, scaled by how much of that throughput this scenario actually
+  // builds. Keying purely off the on/off toggle charged the whole plant to a
+  // scenario with zero output (e.g. the 2026 end of the time machine billed
+  // ฿125B for plants producing nothing).
+  const plant = (on: boolean, lump: number, target: number, reference: number) =>
+    on && target > 0 && reference > 0
+      ? lump * Math.min(1, target / reference)
+      : 0;
+
   const capex =
     i.solarMW * 25e6 +
     i.windMW * 50e6 +
     i.biomassMW * 80e6 +
     i.batteryGWh * 1e6 * i.batteryPricePerKWh +
-    (i.dacOn ? 30e9 : 0) +
-    (i.methanolOn ? 50e9 : 0) +
-    (i.dataCenterOn ? 20e9 : 0) +
-    (i.desalOn ? 15e9 : 0) +
-    (i.wasteOn ? 10e9 : 0);
+    plant(i.dacOn, 30e9, i.dacTargetMtPerYear, PLANT_REFERENCE.dacMtPerYear) +
+    plant(i.methanolOn, 50e9, i.methanolKtPerYear, PLANT_REFERENCE.methanolKtPerYear) +
+    plant(i.dataCenterOn, 20e9, i.dataCenterMW, PLANT_REFERENCE.dataCenterMW) +
+    plant(i.desalOn, 15e9, i.desalMm3PerYear, PLANT_REFERENCE.desalMm3PerYear) +
+    plant(i.wasteOn, 10e9, i.wasteTonPerDay, PLANT_REFERENCE.wasteTonPerDay);
 
   const opex = capex * 0.025; // 2.5%/year
 

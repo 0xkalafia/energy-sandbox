@@ -1,5 +1,6 @@
 import type { SimInputs } from "@/data/types";
 import { DEFAULT_INPUTS } from "@/data/constants";
+import { parseScenarioJSON } from "@/lib/scenarios";
 
 /**
  * Encode/decode SimInputs through the URL hash so users can share
@@ -42,9 +43,9 @@ export function decodeInputsFromHash(hash: string): SimInputs | null {
   const clean = hash.startsWith("#") ? hash.slice(1) : hash;
   if (!clean.startsWith("s=")) return null;
   try {
-    const json = fromBase64Url(clean.slice(2));
-    const delta = JSON.parse(json) as Partial<SimInputs>;
-    return { ...DEFAULT_INPUTS, ...delta };
+    // Shared links are untrusted input just like an uploaded file — run them
+    // through the same validator so a mangled hash can't NaN the engine.
+    return parseScenarioJSON(fromBase64Url(clean.slice(2)));
   } catch {
     return null;
   }

@@ -63,14 +63,53 @@ function triggerDownload(filename: string, content: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
-/** Parse an uploaded scenario .json file into SimInputs (merged over defaults,
- *  so partial / older exports still load). Unknown keys are ignored. */
+/** Keys that must stay inside 0..1 (fractions/shares). */
+const FRACTION_KEYS = new Set([
+  "methanolLocalShare",
+  "batteryDoDFloor",
+  "wwtCoverage",
+]);
+/** Round-trip efficiency: 0 would divide by zero in the dispatch loop. */
+const EFFICIENCY_MIN = 0.01;
+const VALID_SEASONS = new Set(["summer", "rainy", "winter", "monsoon"]);
+
+/**
+ * Parse an uploaded scenario .json file into SimInputs (merged over defaults,
+ * so partial / older exports still load). Unknown keys are ignored.
+ *
+ * Every value is validated against the shape of DEFAULT_INPUTS: numbers must
+ * be finite and non-negative, fractions are clamped to 0..1, and anything of
+ * the wrong type falls back to the default. Without this a hand-edited file
+ * could push e.g. `batteryRoundTrip: 0` into the engine and NaN every KPI.
+ */
 export function parseScenarioJSON(text: string): SimInputs {
   const obj = JSON.parse(text) as Record<string, unknown>;
-  const out: Record<string, unknown> = { ...DEFAULT_INPUTS };
-  for (const k of Object.keys(DEFAULT_INPUTS)) {
-    if (k in obj) out[k] = obj[k];
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
+    throw new Error("scenario must be a JSON object");
   }
+
+  const defaults = DEFAULT_INPUTS as unknown as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...defaults };
+
+  for (const key of Object.keys(defaults)) {
+    if (!(key in obj)) continue;
+    const raw = obj[key];
+    const def = defaults[key];
+
+    if (typeof def === "number") {
+      const n = typeof raw === "number" ? raw : Number(raw);
+      if (!Number.isFinite(n)) continue; // keep the default
+      if (FRACTION_KEYS.has(key)) out[key] = Math.min(1, Math.max(0, n));
+      else if (key === "batteryRoundTrip")
+        out[key] = Math.min(1, Math.max(EFFICIENCY_MIN, n));
+      else out[key] = Math.max(0, n); // capacities/prices can't be negative
+    } else if (typeof def === "boolean") {
+      if (typeof raw === "boolean") out[key] = raw;
+    } else if (key === "season") {
+      if (typeof raw === "string" && VALID_SEASONS.has(raw)) out[key] = raw;
+    }
+  }
+
   return out as unknown as SimInputs;
 }
 

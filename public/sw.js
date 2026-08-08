@@ -1,5 +1,5 @@
 // Minimal offline service worker — stale-while-revalidate for same-origin GETs.
-const CACHE = "energy-sandbox-v1";
+const CACHE = "energy-sandbox-v2";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();

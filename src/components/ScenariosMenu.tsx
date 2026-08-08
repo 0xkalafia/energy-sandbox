@@ -40,9 +40,14 @@ export function ScenariosMenu({ inputs, hourly, setInputs }: Props) {
     }
   };
 
-  useEffect(() => {
-    if (open) setSaved(listScenarios());
-  }, [open]);
+  // Reading localStorage is an *action* taken when the menu opens, not state
+  // that needs syncing — see toggleOpen() below.
+  const toggleOpen = () => {
+    setOpen((o) => {
+      if (!o) setSaved(listScenarios());
+      return !o;
+    });
+  };
 
   // Click-outside to close
   useEffect(() => {
@@ -68,7 +73,7 @@ export function ScenariosMenu({ inputs, hourly, setInputs }: Props) {
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggleOpen}
         className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]/60 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-fg-muted)] backdrop-blur-md transition-all hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]"
         title="Save / load / export scenarios"
         aria-label="Scenarios menu"

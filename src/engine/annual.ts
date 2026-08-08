@@ -1,21 +1,10 @@
-import type { Season, SimInputs } from "@/data/types";
+import type { SimInputs } from "@/data/types";
 import { simulateDay } from "@/engine/simulate";
 
-/** Phetchaburi month → representative season. */
-export const MONTH_SEASON: Season[] = [
-  "winter", // ม.ค.
-  "winter", // ก.พ.
-  "summer", // มี.ค.
-  "summer", // เม.ย.
-  "summer", // พ.ค.
-  "rainy", // มิ.ย.
-  "rainy", // ก.ค.
-  "rainy", // ส.ค.
-  "monsoon", // ก.ย.
-  "monsoon", // ต.ค.
-  "winter", // พ.ย.
-  "winter", // ธ.ค.
-];
+// The month→season mapping lives in data/constants so the engine can use it
+// without importing this module (which would create a cycle).
+export { MONTH_SEASON, ANNUAL_DEMAND_FACTOR } from "@/data/constants";
+import { MONTH_SEASON } from "@/data/constants";
 
 export const MONTH_LABELS = [
   "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",

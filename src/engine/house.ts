@@ -57,8 +57,11 @@ export interface HouseResult {
   // Money
   billNoSolar: number; // ฿/mo if buying everything
   billNow: number; // ฿/mo with solar (+battery)
-  monthlySaving: number; // ฿/mo vs no-solar
+  monthlySaving: number; // ฿/mo vs no-solar (solar + battery combined)
   batteryCost: number; // ฿
+  /** ฿/mo the battery adds *on top of* the same system without it. */
+  batteryMonthlySaving: number;
+  /** batteryCost ÷ marginal annual saving. Infinity = never pays back. */
   batteryPaybackYears: number;
   // Resilience
   offGridHours: number; // how long battery alone covers night load
@@ -66,6 +69,10 @@ export interface HouseResult {
 }
 
 const GRID_CO2_KG_PER_KWH = 0.5; // Thailand grid factor (rough)
+/** Home packs keep a reserve like the provincial model (10% DoD floor). */
+const HOUSE_DOD_FLOOR = 0.1;
+/** Inverter/BMS power limit as a C-rate: a 10 kWh pack moves ≤5 kW. */
+const HOUSE_MAX_C_RATE = 0.5;
 
 export function simulateHouse(i: HouseInputs): HouseResult {
   const solarKWhDay = (i.solarW / 1000) * 24 * i.capacityFactor;
@@ -86,7 +93,9 @@ export function simulateHouse(i: HouseInputs): HouseResult {
   const ev = evShape.map((s) => (evDailyKWh * s) / evSum);
 
   const capKWh = i.batteryKWh;
-  const sqrtRT = Math.sqrt(i.batteryRoundTrip);
+  const sqrtRT = Math.sqrt(Math.max(0.01, i.batteryRoundTrip));
+  const floorKWh = capKWh * HOUSE_DOD_FLOOR; // never discharge below this
+  const maxPowerKW = capKWh * HOUSE_MAX_C_RATE; // per-hour charge/discharge cap
   let soc = capKWh * 0.5;
 
   const hourly: HouseHour[] = [];
@@ -108,10 +117,10 @@ export function simulateHouse(i: HouseInputs): HouseResult {
     let rem = load - solarToLoad;
     solarUsedOnsite += solarToLoad;
 
-    // Surplus solar → charge battery → export
+    // Surplus solar → charge battery (within headroom + C-rate) → export
     if (s > 0) {
       const headroom = Math.max(0, capKWh - soc);
-      const charge = Math.min(s, headroom / sqrtRT);
+      const charge = Math.min(s, maxPowerKW, headroom / sqrtRT);
       soc += charge * sqrtRT;
       solarUsedOnsite += charge; // stored solar is still "used onsite"
       s -= charge;
@@ -119,10 +128,10 @@ export function simulateHouse(i: HouseInputs): HouseResult {
       exportKWh += exp;
     }
 
-    // Remaining load → battery → grid
+    // Remaining load → battery (down to the DoD floor, within C-rate) → grid
     if (rem > 0) {
-      const avail = Math.max(0, soc);
-      const fromBatt = Math.min(rem, avail * sqrtRT);
+      const avail = Math.max(0, soc - floorKWh);
+      const fromBatt = Math.min(rem, maxPowerKW, avail * sqrtRT);
       soc -= fromBatt / sqrtRT;
       rem -= fromBatt;
       imp = rem;
@@ -151,15 +160,27 @@ export function simulateHouse(i: HouseInputs): HouseResult {
   const monthlySaving = billNoSolar - billNow;
 
   const batteryCost = capKWh * i.batteryPricePerKWh;
-  const annualSaving = monthlySaving * 12;
-  const batteryPaybackYears =
-    capKWh > 0 && annualSaving > 0 ? batteryCost / annualSaving : 0;
 
-  // Off-grid: how many hours can the (full) battery alone cover average night load
-  const avgNightLoadKW = totalLoad / 24;
-  const usableKWh = capKWh * Math.min(soc / capKWh || 1, 1);
-  void usableKWh;
-  const offGridHours = avgNightLoadKW > 0 ? (capKWh * sqrtRT) / avgNightLoadKW : 0;
+  // Battery payback must be *marginal*: what the battery adds on top of the
+  // same system without it. Charging it with the whole solar saving made the
+  // number ~30× too optimistic (0.2 yr vs a true 6.5 yr).
+  let batteryPaybackYears = 0;
+  let batteryMonthlySaving = 0;
+  if (capKWh > 0) {
+    const noBattery = simulateHouse({ ...i, batteryKWh: 0 });
+    batteryMonthlySaving = monthlySaving - noBattery.monthlySaving;
+    batteryPaybackYears =
+      batteryMonthlySaving > 0
+        ? batteryCost / (batteryMonthlySaving * 12)
+        : Infinity; // never pays back at these prices
+  }
+
+  // Off-grid: how long the *usable* pack (above the DoD floor) covers the
+  // average load, respecting the discharge power limit.
+  const avgLoadKW = totalLoad / 24;
+  const usableKWh = Math.max(0, capKWh - floorKWh) * sqrtRT;
+  const offGridHours =
+    avgLoadKW > 0 ? usableKWh / Math.min(avgLoadKW, maxPowerKW || avgLoadKW) : 0;
 
   const co2AvoidedKgYear = Math.min(solarUsedOnsite, totalLoad) * 365 * GRID_CO2_KG_PER_KWH;
 
@@ -175,6 +196,7 @@ export function simulateHouse(i: HouseInputs): HouseResult {
     billNow,
     monthlySaving,
     batteryCost,
+    batteryMonthlySaving,
     batteryPaybackYears,
     offGridHours,
     co2AvoidedKgYear,

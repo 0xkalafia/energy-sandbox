@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { SOURCE_COLORS } from "@/data/constants";
 import { useChartTheme } from "@/lib/chartTheme";
-import { seriesTooltip } from "@/components/charts/ChartTooltip";
+import { seriesTooltip } from "@/components/charts/seriesTooltip";
 import type { HourlyPoint } from "@/data/types";
 
 interface Props {

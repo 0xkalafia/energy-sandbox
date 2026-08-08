@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Command } from "cmdk";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -52,10 +52,12 @@ export function CommandPalette({
   const [search, setSearch] = useState("");
   const { mode, setMode } = useTheme();
 
-  // Reset search on close
-  useEffect(() => {
-    if (!open) setSearch("");
-  }, [open]);
+  // Clearing the query is a consequence of the close *event*, not a state
+  // sync — doing it in an effect would trigger a cascading render.
+  const handleOpenChange = (next: boolean) => {
+    if (!next) setSearch("");
+    onOpenChange(next);
+  };
 
   const run = (fn: () => void) => () => {
     fn();
@@ -63,7 +65,7 @@ export function CommandPalette({
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay
           className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm"
@@ -203,7 +205,7 @@ export function CommandPalette({
 
               <Group heading="Tips">
                 <ItemInfo icon={<Activity className="h-3.5 w-3.5" />}>
-                  Press <Kbd>1</Kbd>–<Kbd>7</Kbd> to jump between tabs
+                  Press <Kbd>1</Kbd>–<Kbd>9</Kbd> to jump between tabs
                 </ItemInfo>
                 <ItemInfo icon={<Battery className="h-3.5 w-3.5" />}>
                   Press <Kbd>T</Kbd> to cycle theme · <Kbd>?</Kbd> for help

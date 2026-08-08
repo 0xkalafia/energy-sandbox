@@ -17,7 +17,8 @@ import { StatCard } from "@/components/ui/StatCard";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cn } from "@/lib/utils";
 import { useChartTheme, SERIES } from "@/lib/chartTheme";
-import { GlassTooltip, seriesTooltip } from "@/components/charts/ChartTooltip";
+import { GlassTooltip } from "@/components/charts/ChartTooltip";
+import { seriesTooltip } from "@/components/charts/seriesTooltip";
 import {
   WEATHER_SCENARIOS,
   simulateMultiDay,

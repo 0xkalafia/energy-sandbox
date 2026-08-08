@@ -9,6 +9,7 @@ import { runFinancialMC, DEFAULT_FIN_MC } from "@/engine/financialMC";
 import { simulateHouse, DEFAULT_HOUSE } from "@/engine/house";
 import { allocate } from "@/data/districts";
 import { timeline, inputsForYear, START_YEAR, END_YEAR } from "@/engine/timeMachine";
+import { MONTH_SEASON } from "@/data/constants";
 import { annualGrid } from "@/engine/annual";
 import { parseScenarioJSON } from "@/lib/scenarios";
 
@@ -330,6 +331,156 @@ describe("scenario JSON round-trip", () => {
     expect(parsed.solarMW).toBe(9999);
     expect(parsed.windMW).toBe(DEFAULT_INPUTS.windMW);
     expect((parsed as unknown as Record<string, unknown>).bogusKey).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regressions from the Opus-5 audit. Each of these shipped broken once.
+// ---------------------------------------------------------------------------
+
+describe("boundary sweep — every value the sliders/import allow", () => {
+  const CASES: Array<[string, Partial<typeof DEFAULT_INPUTS>]> = [
+    ["battery 0 GWh (slider min)", { batteryGWh: 0 }],
+    ["solar 0 MW", { solarMW: 0 }],
+    ["no supply at all", { solarMW: 0, windMW: 0, biomassMW: 0, hydroMW: 0 }],
+    ["every mission off", {
+      dacOn: false, methanolOn: false, dataCenterOn: false,
+      desalOn: false, wasteOn: false, wwtOn: false,
+    }],
+    ["battery 0 + missions off", {
+      batteryGWh: 0, dacOn: false, methanolOn: false, dataCenterOn: false,
+      desalOn: false, wasteOn: false, wwtOn: false,
+    }],
+    ["round-trip 0 (reachable via import)", { batteryRoundTrip: 0 }],
+    ["DoD floor 0", { batteryDoDFloor: 0 }],
+    ["DoD floor 0.3 (slider max)", { batteryDoDFloor: 0.3 }],
+  ];
+
+  for (const [name, patch] of CASES) {
+    it(`${name} → no NaN/Infinity anywhere`, () => {
+      const inp = { ...DEFAULT_INPUTS, ...patch };
+      const hourly = simulateDay(inp);
+      for (const h of hourly) {
+        for (const [k, v] of Object.entries(h)) {
+          if (typeof v === "number") {
+            expect(Number.isFinite(v), `hourly.${k}`).toBe(true);
+          }
+        }
+      }
+      const kpis = computeKPIs(inp, hourly);
+      for (const [k, v] of Object.entries(kpis)) {
+        if (typeof v === "number") {
+          expect(Number.isFinite(v), `kpi.${k}`).toBe(true);
+        }
+      }
+    });
+  }
+
+  it("battery 0 reports zero cycles and zero lifespan (not a phantom 40yr)", () => {
+    const k = computeKPIs(
+      { ...DEFAULT_INPUTS, batteryGWh: 0 },
+      simulateDay({ ...DEFAULT_INPUTS, batteryGWh: 0 }),
+    );
+    expect(k.batteryCyclesPerDay).toBe(0);
+    expect(k.batteryLifespanYears).toBe(0);
+    expect(k.batteryMinSoC).toBe(0);
+  });
+});
+
+describe("CAPEX scales with plant utilisation", () => {
+  it("a mission that is on but produces nothing costs nothing", () => {
+    const idle = computeKPIs(
+      { ...DEFAULT_INPUTS, dacTargetMtPerYear: 0 },
+      simulateDay({ ...DEFAULT_INPUTS, dacTargetMtPerYear: 0 }),
+    );
+    const off = computeKPIs(
+      { ...DEFAULT_INPUTS, dacOn: false, dacTargetMtPerYear: 0 },
+      simulateDay({ ...DEFAULT_INPUTS, dacOn: false, dacTargetMtPerYear: 0 }),
+    );
+    expect(idle.capexEstimate).toBeCloseTo(off.capexEstimate, 0);
+  });
+
+  it("half the DAC target costs about half the DAC plant", () => {
+    const full = computeKPIs(DEFAULT_INPUTS, simulateDay(DEFAULT_INPUTS));
+    const half = computeKPIs(
+      { ...DEFAULT_INPUTS, dacTargetMtPerYear: 0.5 },
+      simulateDay({ ...DEFAULT_INPUTS, dacTargetMtPerYear: 0.5 }),
+    );
+    expect(full.capexEstimate - half.capexEstimate).toBeCloseTo(15e9, -8);
+  });
+
+  it("the 2026 end of the time machine isn't billed for 2046 plants", () => {
+    const y26 = inputsForYear(DEFAULT_INPUTS, START_YEAR);
+    const k26 = computeKPIs(y26, simulateDay(y26));
+    const k46 = computeKPIs(DEFAULT_INPUTS, simulateDay(DEFAULT_INPUTS));
+    expect(k26.capexEstimate).toBeLessThan(k46.capexEstimate * 0.1);
+  });
+});
+
+describe("seasonal demand ties out annually", () => {
+  it("the yearly KPI equals the season-weighted average of the daily runs", () => {
+    const perMonth = MONTH_SEASON.map((season) => {
+      const i = { ...DEFAULT_INPUTS, season };
+      return computeKPIs(i, simulateDay(i)).dailyDemandGWh;
+    });
+    const avgDaily = perMonth.reduce((a, b) => a + b, 0) / perMonth.length;
+    const yearly = computeKPIs(DEFAULT_INPUTS, simulateDay(DEFAULT_INPUTS))
+      .yearlyDemandGWh;
+    expect(avgDaily * 365).toBeCloseTo(yearly, -1); // within ~10 GWh of 15,000
+  });
+});
+
+describe("house battery payback is marginal, not the whole solar saving", () => {
+  it("equals batteryCost ÷ the saving the battery itself adds", () => {
+    const withB = simulateHouse({ ...DEFAULT_HOUSE, batteryKWh: 10 });
+    const noB = simulateHouse({ ...DEFAULT_HOUSE, batteryKWh: 0 });
+    const marginal = withB.monthlySaving - noB.monthlySaving;
+    expect(withB.batteryMonthlySaving).toBeCloseTo(marginal, 6);
+    expect(withB.batteryPaybackYears).toBeCloseTo(
+      withB.batteryCost / (marginal * 12),
+      6,
+    );
+    // The old bug divided by the *combined* saving and reported well under a year.
+    expect(withB.batteryPaybackYears).toBeGreaterThan(1);
+  });
+
+  it("reports Infinity rather than a bogus number when it never pays back", () => {
+    const pricey = simulateHouse({
+      ...DEFAULT_HOUSE,
+      batteryKWh: 10,
+      batteryPricePerKWh: 15000,
+      solarW: 100, // almost no surplus for the battery to time-shift
+    });
+    expect(pricey.batteryPaybackYears).toBeGreaterThan(20);
+  });
+
+  it("respects the DoD floor and the C-rate limit", () => {
+    const r = simulateHouse({ ...DEFAULT_HOUSE, batteryKWh: 10 });
+    expect(Math.min(...r.hourly.map((h) => h.soc))).toBeGreaterThanOrEqual(0.099);
+  });
+});
+
+describe("untrusted scenario input can't poison the engine", () => {
+  it("clamps a round-trip of 0 instead of dividing by zero", () => {
+    const parsed = parseScenarioJSON('{"batteryRoundTrip":0}');
+    expect(parsed.batteryRoundTrip).toBeGreaterThan(0);
+    const k = computeKPIs(parsed, simulateDay(parsed));
+    expect(Number.isFinite(k.dailyImportGWh)).toBe(true);
+  });
+
+  it("rejects wrong types, NaN and negatives; clamps fractions", () => {
+    const parsed = parseScenarioJSON(
+      '{"solarMW":"not a number","windMW":-500,"methanolLocalShare":5,"dacOn":"yes","season":"tuesday"}',
+    );
+    expect(parsed.solarMW).toBe(DEFAULT_INPUTS.solarMW); // junk → default
+    expect(parsed.windMW).toBe(0); // negative → clamped
+    expect(parsed.methanolLocalShare).toBe(1); // fraction → clamped
+    expect(parsed.dacOn).toBe(DEFAULT_INPUTS.dacOn); // wrong type → default
+    expect(parsed.season).toBe(DEFAULT_INPUTS.season); // unknown → default
+  });
+
+  it("throws on a non-object payload", () => {
+    expect(() => parseScenarioJSON("[1,2,3]")).toThrow();
   });
 });
 

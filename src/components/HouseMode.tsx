@@ -99,9 +99,28 @@ export function HouseMode() {
         <StatCard label="ประหยัด/เดือน" value={baht(r.monthlySaving)} sub={`จาก ${baht(r.billNoSolar)}`} tone="emerald" />
         <StatCard
           label="แบตคืนทุน"
-          value={h.batteryKWh > 0 ? `${r.batteryPaybackYears.toFixed(1)} ปี` : "—"}
-          sub={h.batteryKWh > 0 ? baht(r.batteryCost) : "ไม่มีแบต"}
-          tone={r.batteryPaybackYears > 0 && r.batteryPaybackYears < 8 ? "emerald" : "amber"}
+          value={
+            h.batteryKWh === 0
+              ? "—"
+              : Number.isFinite(r.batteryPaybackYears)
+                ? `${r.batteryPaybackYears.toFixed(1)} ปี`
+                : "ไม่คืนทุน"
+          }
+          sub={
+            h.batteryKWh === 0
+              ? "ไม่มีแบต"
+              : `${baht(r.batteryCost)} · ประหยัดเพิ่ม ${baht(r.batteryMonthlySaving)}/ด.`
+          }
+          tone={
+            h.batteryKWh === 0
+              ? "neutral"
+              : r.batteryPaybackYears < 8
+                ? "emerald"
+                : Number.isFinite(r.batteryPaybackYears)
+                  ? "amber"
+                  : "rose"
+          }
+          info="คิดแบบ marginal: เทียบระบบเดิมที่ไม่มีแบต — ส่วนที่แบตช่วยประหยัดเพิ่มเท่านั้น (ไม่นับเงินที่โซลาร์ประหยัดให้อยู่แล้ว)"
         />
         <StatCard label="Off-grid" value={`${r.offGridHours.toFixed(0)} ชม.`} sub="แบตเลี้ยงคืนเดียว" tone="violet" />
         <StatCard label="ลด CO₂" value={`${(r.co2AvoidedKgYear / 1000).toFixed(1)} t/ปี`} tone="emerald" />

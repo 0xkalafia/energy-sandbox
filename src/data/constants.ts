@@ -102,6 +102,16 @@ PRESETS.aggressive.inputs = {
   batteryGWh: 50,
 };
 
+/** Throughput each plant's reference CAPEX lump sum is quoted for.
+ *  A scenario building less than this is charged pro-rata (capped at 1×). */
+export const PLANT_REFERENCE = {
+  dacMtPerYear: 1.0,
+  methanolKtPerYear: 727,
+  dataCenterMW: 200,
+  desalMm3PerYear: 250,
+  wasteTonPerDay: 1645,
+} as const;
+
 /** Energy intensity per task — used to size demand from targets. */
 export const ENERGY_INTENSITY = {
   /** kWh per ton CO2 captured by DAC */
@@ -124,14 +134,29 @@ export const ENERGY_INTENSITY = {
 } as const;
 
 /** Cooling-driven seasonal multiplier on the residential/lifestyle load.
- *  Summer A/C pushes demand up; cool/rainy seasons relax it. Missions stay flat.
- *  (Roughly averages to ~1.0 across the year.) */
+ *  Summer A/C pushes demand up; cool/rainy seasons relax it. Missions stay flat. */
 export const DEMAND_SEASON: Record<Season, number> = {
   summer: 1.2,
   rainy: 1.0,
   winter: 0.9,
   monsoon: 1.0,
 };
+
+/** Phetchaburi month (Jan→Dec) → representative season. */
+export const MONTH_SEASON: Season[] = [
+  "winter", "winter", "summer", "summer", "summer", "rainy",
+  "rainy", "rainy", "monsoon", "monsoon", "winter", "winter",
+];
+
+/**
+ * Year-average of DEMAND_SEASON weighted by how many months fall in each
+ * season. `simulateDay` scales the lifestyle load seasonally, so any *annual*
+ * figure has to apply this same average or the daily and yearly KPIs drift
+ * apart (summer daily×365 was reading 3.6% above the yearly KPI).
+ */
+export const ANNUAL_DEMAND_FACTOR =
+  MONTH_SEASON.reduce((sum, s) => sum + DEMAND_SEASON[s], 0) /
+  MONTH_SEASON.length;
 
 /** Capacity factor per source, per season (annual average for daily total). */
 export const CF_BY_SEASON: Record<
