@@ -5,7 +5,9 @@ import {
   DEMAND_SEASON,
   ENERGY_INTENSITY,
   LIFESTYLE_SHAPE_24H,
+  MISSION_FLEX,
   PLANT_REFERENCE,
+  SMART_DISPATCH_MAX_BOOST,
   SOLAR_SHAPE_24H,
   USD_TO_THB,
   WIND_SHAPE_24H,
@@ -111,6 +113,73 @@ export function computeDemandSizes(i: SimInputs): DemandSizes {
   };
 }
 
+// ---------- Flexible-load shaping ----------
+
+/**
+ * Spread a shiftable block of daily energy across the 24 hours, favouring the
+ * hours with the most spare supply.
+ *
+ * Every hour first gets its floor (`minTurndown` × the flat average) because a
+ * plant can't cold-stop; the remaining energy is then poured into the hours
+ * with the most headroom, water-filling style, up to `maxBoost` × average. If
+ * the surplus hours can't absorb it all (a monsoon day, say), the remainder is
+ * spread evenly over whatever capacity is left — degrading gracefully back
+ * toward the flat profile.
+ *
+ * **Daily energy is always conserved**: shifting changes when a mission runs,
+ * never how much it produces.
+ */
+export function shapeShiftable(
+  dailyMWh: number,
+  headroomMW: number[],
+  minTurndown: number,
+  maxBoost: number,
+): number[] {
+  const H = 24;
+  if (dailyMWh <= 0) return Array(H).fill(0);
+
+  const avg = dailyMWh / H;
+  const floor = avg * Math.min(1, Math.max(0, minTurndown));
+  const ceil = avg * Math.max(1, maxBoost);
+
+  const alloc = Array<number>(H).fill(floor);
+  let remaining = dailyMWh - floor * H;
+
+  // Pass 1 — pour into real surplus, most generous hour first.
+  const byHeadroom = headroomMW
+    .map((mw, h) => ({ h, mw }))
+    .sort((a, b) => b.mw - a.mw);
+
+  for (const { h, mw } of byHeadroom) {
+    if (remaining <= 1e-9) break;
+    const roomInPlant = ceil - alloc[h];
+    const roomInSupply = Math.max(0, mw - alloc[h]);
+    const take = Math.min(remaining, roomInPlant, roomInSupply);
+    if (take > 0) {
+      alloc[h] += take;
+      remaining -= take;
+    }
+  }
+
+  // Pass 2 — not enough surplus to soak it up: fill the rest evenly within the
+  // plant's ceiling (this is what makes a monsoon day collapse back to flat).
+  while (remaining > 1e-9) {
+    const open = alloc.map((v, h) => ({ h, room: ceil - v })).filter((x) => x.room > 1e-9);
+    if (open.length === 0) break; // ceiling everywhere — can't place more
+    const share = remaining / open.length;
+    let placed = 0;
+    for (const { h, room } of open) {
+      const take = Math.min(share, room);
+      alloc[h] += take;
+      placed += take;
+    }
+    remaining -= placed;
+    if (placed <= 1e-12) break; // no progress, bail rather than spin
+  }
+
+  return alloc;
+}
+
 // ---------- Hourly simulation ----------
 
 export interface DispatchOpts {
@@ -156,13 +225,64 @@ export function simulateDay(
     d.lifestyle * DEMAND_SEASON[i.season],
     LIFESTYLE_SHAPE_24H,
   );
-  // Flexible loads = flat baseline (could be smarter; MVP keeps simple)
-  const dac = Array(24).fill((d.dac * 1000) / 24);
-  const methanol = Array(24).fill((d.methanol * 1000) / 24);
-  const dataCenter = Array(24).fill((d.dataCenter * 1000) / 24);
-  const desal = Array(24).fill((d.desal * 1000) / 24);
-  const waste = Array(24).fill((d.waste * 1000) / 24);
-  const wwt = Array(24).fill((d.wwt * 1000) / 24);
+  // Missions. Continuous processes stay flat; shiftable ones are steered into
+  // the surplus hours when smart dispatch is on (daily energy unchanged).
+  const flat = (gwhPerDay: number) => Array<number>(24).fill((gwhPerDay * 1000) / 24);
+
+  const dataCenter = flat(d.dataCenter); // 24/7 by definition
+  const wwt = flat(d.wwt); // sewage arrives on its own schedule
+
+  let dac = flat(d.dac);
+  let methanol = flat(d.methanol);
+  let desal = flat(d.desal);
+  let waste = flat(d.waste);
+
+  if (i.smartDispatch) {
+    // Headroom the shiftable block may chase: what's left after the must-serve
+    // lifestyle load and the always-on missions have taken their cut.
+    const headroom = Array.from({ length: 24 }, (_, h) =>
+      Math.max(
+        0,
+        solar[h] + wind[h] + biomass[h] + hydro[h] -
+          lifestyle[h] -
+          dataCenter[h] -
+          wwt[h],
+      ),
+    );
+
+    // Shape the block as a whole so the missions compete for the same surplus
+    // rather than each independently piling into noon, then split it back in
+    // proportion to each mission's own daily energy.
+    const parts = [
+      ["dac", d.dac] as const,
+      ["desal", d.desal] as const,
+      ["methanol", d.methanol] as const,
+      ["waste", d.waste] as const,
+    ];
+    const blockGWh = parts.reduce((s, [, gwh]) => s + gwh, 0);
+
+    if (blockGWh > 0) {
+      // Energy-weighted turndown: the block can only idle as low as its
+      // stiffest member allows, weighted by how big each member is.
+      const turndown =
+        parts.reduce((s, [k, gwh]) => s + MISSION_FLEX[k].minTurndown * gwh, 0) /
+        blockGWh;
+
+      const blockMW = shapeShiftable(
+        blockGWh * 1000,
+        headroom,
+        turndown,
+        SMART_DISPATCH_MAX_BOOST,
+      );
+      const shapeOf = (gwh: number) =>
+        blockMW.map((mw) => (mw * gwh) / blockGWh);
+
+      dac = shapeOf(d.dac);
+      desal = shapeOf(d.desal);
+      methanol = shapeOf(d.methanol);
+      waste = shapeOf(d.waste);
+    }
+  }
 
   // Battery state. Guard the degenerate cases the UI/import can reach:
   // batteryGWh = 0 (slider min) would make every SoC 0/0 = NaN, and a
@@ -372,9 +492,26 @@ export function computeKPIs(i: SimInputs, hourly: HourlyPoint[]): KPIs {
   // builds. Keying purely off the on/off toggle charged the whole plant to a
   // scenario with zero output (e.g. the 2026 end of the time machine billed
   // ฿125B for plants producing nothing).
-  const plant = (on: boolean, lump: number, target: number, reference: number) =>
+  // A plant shifted into the sunny hours runs above its own daily average, so
+  // its nameplate — and its price — has to cover that peak. Reading the ratio
+  // back off the hourly trace keeps smart dispatch honest: it buys resilience
+  // with plant capacity instead of getting it for free.
+  const peakOverAverage = (key: keyof HourlyPoint) => {
+    const series = hourly.map((h) => h[key] as number);
+    const total = series.reduce((a, b) => a + b, 0);
+    if (total <= 0) return 1;
+    return Math.max(...series) / (total / series.length);
+  };
+
+  const plant = (
+    on: boolean,
+    lump: number,
+    target: number,
+    reference: number,
+    seriesKey: keyof HourlyPoint,
+  ) =>
     on && target > 0 && reference > 0
-      ? lump * Math.min(1, target / reference)
+      ? lump * Math.min(1, target / reference) * peakOverAverage(seriesKey)
       : 0;
 
   const capex =
@@ -382,11 +519,11 @@ export function computeKPIs(i: SimInputs, hourly: HourlyPoint[]): KPIs {
     i.windMW * 50e6 +
     i.biomassMW * 80e6 +
     i.batteryGWh * 1e6 * i.batteryPricePerKWh +
-    plant(i.dacOn, 30e9, i.dacTargetMtPerYear, PLANT_REFERENCE.dacMtPerYear) +
-    plant(i.methanolOn, 50e9, i.methanolKtPerYear, PLANT_REFERENCE.methanolKtPerYear) +
-    plant(i.dataCenterOn, 20e9, i.dataCenterMW, PLANT_REFERENCE.dataCenterMW) +
-    plant(i.desalOn, 15e9, i.desalMm3PerYear, PLANT_REFERENCE.desalMm3PerYear) +
-    plant(i.wasteOn, 10e9, i.wasteTonPerDay, PLANT_REFERENCE.wasteTonPerDay);
+    plant(i.dacOn, 30e9, i.dacTargetMtPerYear, PLANT_REFERENCE.dacMtPerYear, "dac") +
+    plant(i.methanolOn, 50e9, i.methanolKtPerYear, PLANT_REFERENCE.methanolKtPerYear, "methanol") +
+    plant(i.dataCenterOn, 20e9, i.dataCenterMW, PLANT_REFERENCE.dataCenterMW, "dataCenter") +
+    plant(i.desalOn, 15e9, i.desalMm3PerYear, PLANT_REFERENCE.desalMm3PerYear, "desal") +
+    plant(i.wasteOn, 10e9, i.wasteTonPerDay, PLANT_REFERENCE.wasteTonPerDay, "waste");
 
   const opex = capex * 0.025; // 2.5%/year
 

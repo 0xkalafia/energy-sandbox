@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_INPUTS, PRESETS } from "@/data/constants";
-import { computeKPIs, simulateDay } from "@/engine/simulate";
+import { DEFAULT_INPUTS, PRESETS, SMART_DISPATCH_MAX_BOOST } from "@/data/constants";
+import { computeKPIs, simulateDay, shapeShiftable } from "@/engine/simulate";
 import { simulateMultiDay } from "@/engine/multiDay";
 import { projectMultiYear, DEFAULT_MULTI_YEAR } from "@/engine/multiYear";
 import { runMonteCarlo, DEFAULT_MC } from "@/engine/monteCarlo";
@@ -401,10 +401,13 @@ describe("CAPEX scales with plant utilisation", () => {
   });
 
   it("half the DAC target costs about half the DAC plant", () => {
-    const full = computeKPIs(DEFAULT_INPUTS, simulateDay(DEFAULT_INPUTS));
+    // Flat dispatch pins peak/average at 1 so this isolates the pro-rata rule
+    // from the oversizing multiplier (covered separately below).
+    const base = { ...DEFAULT_INPUTS, smartDispatch: false };
+    const full = computeKPIs(base, simulateDay(base));
     const half = computeKPIs(
-      { ...DEFAULT_INPUTS, dacTargetMtPerYear: 0.5 },
-      simulateDay({ ...DEFAULT_INPUTS, dacTargetMtPerYear: 0.5 }),
+      { ...base, dacTargetMtPerYear: 0.5 },
+      simulateDay({ ...base, dacTargetMtPerYear: 0.5 }),
     );
     expect(full.capexEstimate - half.capexEstimate).toBeCloseTo(15e9, -8);
   });
@@ -481,6 +484,110 @@ describe("untrusted scenario input can't poison the engine", () => {
 
   it("throws on a non-object payload", () => {
     expect(() => parseScenarioJSON("[1,2,3]")).toThrow();
+  });
+});
+
+describe("smart dispatch — shifting missions into the surplus", () => {
+  const flat = { ...DEFAULT_INPUTS, smartDispatch: false };
+  const smart = { ...DEFAULT_INPUTS, smartDispatch: true };
+
+  it("conserves each mission's daily energy — it moves load, it doesn't delete it", () => {
+    const a = simulateDay(flat);
+    const b = simulateDay(smart);
+    for (const key of ["dac", "desal", "methanol", "waste", "dataCenter", "wwt"] as const) {
+      const sumA = a.reduce((s, h) => s + h[key], 0);
+      const sumB = b.reduce((s, h) => s + h[key], 0);
+      expect(sumB, key).toBeCloseTo(sumA, 6);
+    }
+  });
+
+  it("moves shiftable load toward the sunny hours", () => {
+    const a = simulateDay(flat);
+    const b = simulateDay(smart);
+    const noon = (arr: typeof a) =>
+      arr.slice(10, 15).reduce((s, h) => s + h.dac + h.desal, 0);
+    const night = (arr: typeof a) =>
+      [...arr.slice(0, 5), ...arr.slice(21)].reduce((s, h) => s + h.dac + h.desal, 0);
+    expect(noon(b)).toBeGreaterThan(noon(a));
+    expect(night(b)).toBeLessThan(night(a));
+  });
+
+  it("never shifts the 24/7 missions", () => {
+    const b = simulateDay(smart);
+    const dc = b.map((h) => h.dataCenter);
+    const wwt = b.map((h) => h.wwt);
+    expect(Math.max(...dc) - Math.min(...dc)).toBeLessThan(1e-6);
+    expect(Math.max(...wwt) - Math.min(...wwt)).toBeLessThan(1e-6);
+  });
+
+  it("respects the turndown floor and the boost ceiling", () => {
+    const b = simulateDay(smart);
+    const series = b.map((h) => h.dac);
+    const avg = series.reduce((s, v) => s + v, 0) / series.length;
+    expect(Math.min(...series)).toBeGreaterThan(0); // never cold-stops
+    expect(Math.max(...series)).toBeLessThanOrEqual(avg * SMART_DISPATCH_MAX_BOOST + 1e-6);
+  });
+
+  it("cuts the islanded battery drawdown (the point of the whole exercise)", () => {
+    const a = simulateMultiDay(flat, 7, "monsoonStreak", { gridLimitMW: 0 });
+    const b = simulateMultiDay(smart, 7, "monsoonStreak", { gridLimitMW: 0 });
+    expect(b.curtailedGWh).toBeLessThan(a.curtailedGWh);
+  });
+
+  it("charges for the plant oversizing rather than handing it out free", () => {
+    const ka = computeKPIs(flat, simulateDay(flat));
+    const kb = computeKPIs(smart, simulateDay(smart));
+    expect(kb.capexEstimate).toBeGreaterThan(ka.capexEstimate);
+    // Revenue is set by annual targets, so it must be untouched by timing.
+    expect(kb.totalAnnualValue).toBeCloseTo(ka.totalAnnualValue, 0);
+  });
+
+  it("loses to cheap storage but wins once batteries get expensive", () => {
+    // The interesting result: shifting buys plant nameplate to avoid buying
+    // storage, so which one wins is purely a price question. Give the smart
+    // case the smaller battery its lighter cycling allows and compare CAPEX.
+    const compare = (batteryPricePerKWh: number) => {
+      const f = { ...DEFAULT_INPUTS, batteryPricePerKWh, smartDispatch: false };
+      const s = {
+        ...DEFAULT_INPUTS,
+        batteryPricePerKWh,
+        smartDispatch: true,
+        batteryGWh: DEFAULT_INPUTS.batteryGWh * 0.55,
+      };
+      return (
+        computeKPIs(s, simulateDay(s)).capexEstimate -
+        computeKPIs(f, simulateDay(f)).capexEstimate
+      );
+    };
+    expect(compare(525)).toBeGreaterThan(0); // 2046 sodium-ion → flat wins
+    expect(compare(15000)).toBeLessThan(0); // today's prices → shifting wins
+  });
+
+  it("degrades to (near) flat when there is no surplus to chase", () => {
+    const dark = { ...smart, solarMW: 0, windMW: 0, biomassMW: 0, hydroMW: 0 };
+    const series = simulateDay(dark).map((h) => h.dac);
+    const avg = series.reduce((s, v) => s + v, 0) / series.length;
+    for (const v of series) expect(v).toBeCloseTo(avg, 6);
+  });
+});
+
+describe("shapeShiftable", () => {
+  it("conserves energy for any headroom shape", () => {
+    const headroom = Array.from({ length: 24 }, (_, h) => (h > 8 && h < 17 ? 900 : 0));
+    const out = shapeShiftable(2400, headroom, 0.3, 1.6);
+    expect(out.reduce((a, b) => a + b, 0)).toBeCloseTo(2400, 6);
+    expect(out).toHaveLength(24);
+  });
+
+  it("returns all zeros for zero energy", () => {
+    expect(shapeShiftable(0, Array(24).fill(500), 0.3, 1.6)).toEqual(Array(24).fill(0));
+  });
+
+  it("conserves energy even when the ceiling binds everywhere", () => {
+    // Boost of 1.0 pins every hour to the average — nothing can move.
+    const out = shapeShiftable(2400, Array(24).fill(1e6), 0.3, 1.0);
+    expect(out.reduce((a, b) => a + b, 0)).toBeCloseTo(2400, 6);
+    for (const v of out) expect(v).toBeCloseTo(100, 6);
   });
 });
 

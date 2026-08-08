@@ -34,6 +34,12 @@ export interface SimInputs {
   wasteTonPerDay: number; // tonnes per day (incl. legacy mining)
   wwtOn: boolean;
   wwtCoverage: number; // 0..1
+  /**
+   * Steer shiftable missions (DAC / desal / methanol / plasma) into the hours
+   * with the most surplus instead of running them flat around the clock.
+   * Daily energy is unchanged — only its timing.
+   */
+  smartDispatch: boolean;
 
   // Battery
   batteryGWh: number;

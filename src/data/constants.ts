@@ -52,6 +52,12 @@ export const DEFAULT_INPUTS: SimInputs = {
   wasteTonPerDay: 1645,
   wwtOn: true,
   wwtCoverage: 1.0,
+  // Off by default: the plan as originally conceived runs the missions flat.
+  // Turning it on is the experiment — and at the ฿525/kWh battery assumed here
+  // it loses, because oversizing a chemical plant costs more than storing the
+  // energy. It only pays above roughly ฿6,000/kWh. Worth discovering, not
+  // worth assuming.
+  smartDispatch: false,
 
   // Battery (Sodium-ion 2046 projection)
   batteryGWh: 22.25,
@@ -101,6 +107,36 @@ PRESETS.aggressive.inputs = {
   wasteTonPerDay: 2500,
   batteryGWh: 50,
 };
+
+/**
+ * How freely each mission can move its load through the day.
+ *
+ * `shiftable` missions can be steered into the hours with the most surplus —
+ * the whole point of the Phetchaburi plan ("เอาไฟส่วนเกินตอนเที่ยงไปรัน DAC /
+ * ผลิตน้ำจืด"). `minTurndown` is the floor a plant can idle at (as a fraction
+ * of its own daily average) — real plants can't cold-stop every night.
+ *
+ * Data centres and wastewater are continuous processes: they don't shift.
+ */
+export const MISSION_FLEX: Record<
+  "dac" | "methanol" | "dataCenter" | "desal" | "waste" | "wwt",
+  { shiftable: boolean; minTurndown: number }
+> = {
+  dac: { shiftable: true, minTurndown: 0.25 }, // modular contactors, easy to idle
+  desal: { shiftable: true, minTurndown: 0.3 }, // buffer tanks absorb the swing
+  methanol: { shiftable: true, minTurndown: 0.4 }, // synthesis prefers steadier feed
+  waste: { shiftable: true, minTurndown: 0.5 }, // plasma furnace stays hot
+  dataCenter: { shiftable: false, minTurndown: 1 }, // 24/7 by definition
+  wwt: { shiftable: false, minTurndown: 1 }, // sewage arrives on its own schedule
+};
+
+/**
+ * Ceiling on how hard a shifted plant may be pushed, as a multiple of its own
+ * daily average. Running 1.6× at noon means buying 1.6× the nameplate — priced
+ * in computeKPIs so shifting trades battery cost for plant cost instead of
+ * being a free win.
+ */
+export const SMART_DISPATCH_MAX_BOOST = 1.6;
 
 /** Throughput each plant's reference CAPEX lump sum is quoted for.
  *  A scenario building less than this is charged pro-rata (capped at 1×). */

@@ -152,6 +152,29 @@ export function Sidebar({ inputs, setInputs, onClose }: Props) {
 
         {/* Demand modules */}
         <Section title="โหลด/ภารกิจ" icon={<Flame className="h-3.5 w-3.5" />}>
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-hover)]/40 p-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-[var(--color-fg)]">
+                Smart dispatch
+              </p>
+              <p className="mt-0.5 text-[10px] leading-snug text-[var(--color-fg-subtle)]">
+                {inputs.smartDispatch
+                  ? "เลื่อน DAC/น้ำจืด/methanol/ขยะ ไปชั่วโมงที่ไฟล้น — พลังงานต่อวันเท่าเดิม แต่ต้องซื้อโรงงานใหญ่ขึ้นตาม peak"
+                  : "ทุกภารกิจรันแบนราบ 24 ชม. (ตามแผนตั้งต้น)"}
+              </p>
+              <p className="mt-1 text-[10px] leading-snug text-[var(--color-amber-glow)]/80">
+                คุ้มเมื่อแบตแพงกว่า ~฿6,000/kWh · ที่ ฿
+                {inputs.batteryPricePerKWh.toLocaleString()} ตอนนี้
+                {inputs.batteryPricePerKWh > 6000
+                  ? " การเลื่อนถูกกว่าเก็บใส่แบต"
+                  : " เก็บใส่แบตถูกกว่าขยายโรงงาน"}
+              </p>
+            </div>
+            <Switch
+              checked={inputs.smartDispatch}
+              onChange={(v) => update("smartDispatch", v)}
+            />
+          </div>
           <ModuleRow
             label="Lifestyle + EV"
             on={true}
