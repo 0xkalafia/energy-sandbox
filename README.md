@@ -20,6 +20,7 @@ update in real time.
 ```bash
 npm install
 npm run dev        # → http://localhost:5173
+npm run lint       # ESLint (CI gate)
 npm test           # engine unit tests (Vitest)
 npm run typecheck  # tsc --noEmit
 npm run build      # production build
@@ -63,9 +64,14 @@ Pure, testable functions in `src/engine/`:
 7. **`annualGrid` / `timeline`** — a 12-month representative year and the
    2026→2046 build-out. **`simulateHouse`** — the residential model.
 
-Lifestyle load flexes with the season (summer cooling +20%). Methanol revenue
-splits export vs local (`methanolLocalShare`) so a ton is sold **or** burned
-locally, never double-counted.
+Lifestyle load flexes with the season (summer cooling +20%), and annual figures
+carry `ANNUAL_DEMAND_FACTOR` — the month-weighted average — so daily×365 ties out
+to the yearly KPI. Methanol revenue splits export vs local
+(`methanolLocalShare`) so a ton is sold **or** burned locally, never
+double-counted. Plant CAPEX scales with utilisation (`PLANT_REFERENCE`) rather
+than an on/off toggle, so a scenario that builds a tenth of the plan isn't
+charged for the whole thing. Scenario JSON and share links are validated before
+they reach the engine.
 
 ## What this is *not*
 
@@ -74,9 +80,14 @@ assumptions live in `src/data/constants.ts` — edit them to fit your own priors
 
 ## Tests
 
-`npm test` (34 tests) covers energy conservation, the islanded blackout path,
-seasonal demand, methanol split, real SoC chaining, multi-year monotonicity,
-Monte Carlo determinism, the optimizer's min-CAPEX feasibility, the 2026→2046
-build-out, district-allocation conservation, the residential model, and the
-scenario-JSON round-trip. CI (`.github/workflows/ci.yml`) runs typecheck +
-tests + build on every push.
+`npm test` (53 tests) covers energy conservation, the islanded blackout path,
+seasonal demand tie-out, methanol split, real SoC chaining, multi-year
+monotonicity, Monte Carlo determinism, the optimizer's min-CAPEX feasibility,
+the 2026→2046 build-out, district-allocation conservation, the residential model
+(marginal battery payback, DoD floor), and untrusted-input validation.
+
+A **boundary sweep** asserts no NaN/Infinity for every value the sliders and the
+importer allow — battery at 0, no supply, all missions off, round-trip 0. That
+class of bug previously had no coverage.
+
+CI (`.github/workflows/ci.yml`) runs lint + typecheck + tests + build on every push.
