@@ -239,15 +239,37 @@ function SankeyNode(props: {
     name: string;
     color?: string;
     value: number;
+    /** Column index assigned by the layout: 0 = the leftmost (source) column. */
+    depth?: number;
+    /** recharts fills this with the node's *incoming* links. */
     sourceLinks?: unknown[];
-    targetLinks?: unknown[];
   };
-  containerWidth?: number;
 }) {
-  const { x = 0, y = 0, width = 0, height = 0, payload, containerWidth = 0 } = props;
+  const { x = 0, y = 0, width = 0, height = 0, payload } = props;
   if (!payload) return null;
-  const isRight = x > containerWidth - 120;
   const color = payload.color ?? "oklch(0.7 0.01 270)";
+
+  // Labels hang to the left of their bar, except in the leftmost column where
+  // that would push them off the canvas. Keyed off the layout's own `depth`
+  // (0 = first column); recharts drops unknown fields from the node data, so
+  // our own `group` never survives the trip, and an earlier attempt to infer
+  // the side from `containerWidth` failed because recharts leaves it undefined
+  // — which is why every label was being right-aligned into the void.
+  const isFirstColumn =
+    payload.depth === 0 ||
+    (payload.depth === undefined && (payload.sourceLinks?.length ?? 0) === 0);
+
+  const labelX = isFirstColumn ? x + width + 8 : x - 8;
+  const anchor = isFirstColumn ? "start" : "end";
+
+  // Source labels sit over the ribbons, so give every label a background-
+  // coloured halo to keep it legible in both themes.
+  const halo = {
+    stroke: "var(--color-bg)",
+    strokeWidth: 3,
+    paintOrder: "stroke" as const,
+    strokeLinejoin: "round" as const,
+  };
 
   return (
     <g>
@@ -261,25 +283,27 @@ function SankeyNode(props: {
         rx={3}
       />
       <text
-        x={isRight ? x - 8 : x + width + 8}
+        x={labelX}
         y={y + height / 2}
-        textAnchor={isRight ? "end" : "start"}
+        textAnchor={anchor}
         dominantBaseline="middle"
         className="tabular"
         fill="var(--color-fg)"
         fontSize={11}
         fontWeight={500}
+        {...halo}
       >
         {payload.name}
       </text>
       <text
-        x={isRight ? x - 8 : x + width + 8}
+        x={labelX}
         y={y + height / 2 + 14}
-        textAnchor={isRight ? "end" : "start"}
+        textAnchor={anchor}
         dominantBaseline="middle"
         className="tabular"
         fill="var(--color-fg-subtle)"
         fontSize={9}
+        {...halo}
       >
         {payload.value.toFixed(1)} GWh
       </text>
