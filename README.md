@@ -24,7 +24,30 @@ npm run lint       # ESLint (CI gate)
 npm test           # engine unit tests (Vitest)
 npm run typecheck  # tsc --noEmit
 npm run build      # production build
+npm run visual     # chart layout audit (dev server must be running)
 ```
+
+### `npm run visual`
+
+Unit tests cover the engine; nothing covered the charts, and layout bugs kept
+slipping through — labels rendered off the left edge, then off the bottom once
+that was fixed, and Sankey ribbons that were invisible in light mode because
+the stroke was a hardcoded near-white.
+
+This drives the Chrome already installed on the machine (via `playwright-core`,
+so no browser download), walks all ten tabs in **both** colour schemes, and
+fails if any chart text escapes its own SVG on any of the four edges. It also
+warns on labels that collide with each other, and writes full-page PNGs to
+`.visual/<tag>/<scheme>/` so the rendering can be looked at, not just measured.
+
+```bash
+npm run dev
+npm run visual -- --tag before   # names the screenshot folder
+```
+
+Kept out of CI on purpose: text metrics depend on the installed fonts, and a
+Linux runner without the Thai font would measure different widths and report
+clipping that doesn't exist on the machine anyone actually uses.
 
 ## Tabs (10)
 

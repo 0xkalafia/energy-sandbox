@@ -2,6 +2,7 @@ import { ResponsiveContainer, Sankey, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { GlassTooltip } from "@/components/charts/ChartTooltip";
+import { useChartTheme } from "@/lib/chartTheme";
 import { computeDemandSizes } from "@/engine/simulate";
 import { CF_BY_SEASON } from "@/data/constants";
 import type { HourlyPoint, SimInputs } from "@/data/types";
@@ -23,7 +24,19 @@ interface SLink {
   value: number;
 }
 
+/**
+ * Vertical room a node label needs on either side of its bar's centre.
+ * The label is two lines centred on the node (see SankeyNode), so half the
+ * block sticks out above and half below — including for the topmost and
+ * bottommost nodes, whose centres sit right on the edge of the plot area.
+ * The Sankey margin has to cover that or the SVG clips them, which is exactly
+ * how the bottom row's "GWh" values went missing.
+ */
+const LABEL_HALF_BLOCK = 16;
+
 export function SankeyDiagram({ inputs, hourly }: Props) {
+  const theme = useChartTheme();
+
   // ---------- Daily production by source (GWh/day) ----------
   const cf = CF_BY_SEASON[inputs.season];
   const solar = (inputs.solarMW * 24 * cf.solar) / 1000;
@@ -173,9 +186,20 @@ export function SankeyDiagram({ inputs, hourly }: Props) {
                 nodeWidth={12}
                 linkCurvature={0.55}
                 iterations={64}
-                margin={{ top: 10, right: 100, left: 10, bottom: 10 }}
+                margin={{
+                  top: LABEL_HALF_BLOCK,
+                  bottom: LABEL_HALF_BLOCK,
+                  // Every label hangs *inside* the plot area — the first column
+                  // to the right of its bar, the rest to the left — so the
+                  // sides only need enough room for the bars themselves.
+                  left: 12,
+                  right: 16,
+                }}
                 node={<SankeyNode />}
-                link={{ stroke: "oklch(0.96 0.005 270 / 0.12)" }}
+                // Ribbons have to be readable on both backgrounds. This was a
+                // fixed near-white at 12% opacity, which meant white-on-white:
+                // in light mode the flows simply weren't there.
+                link={{ stroke: theme.fg, strokeOpacity: 0.13 }}
               >
                 <Tooltip
                   content={({ active, payload }) => {
@@ -262,6 +286,10 @@ function SankeyNode(props: {
   const labelX = isFirstColumn ? x + width + 8 : x - 8;
   const anchor = isFirstColumn ? "start" : "end";
 
+  // Two lines straddling the node's centre rather than hanging off it, so the
+  // block stays inside LABEL_HALF_BLOCK on both sides.
+  const cy = y + height / 2;
+
   // Source labels sit over the ribbons, so give every label a background-
   // coloured halo to keep it legible in both themes.
   const halo = {
@@ -284,7 +312,7 @@ function SankeyNode(props: {
       />
       <text
         x={labelX}
-        y={y + height / 2}
+        y={cy - 6}
         textAnchor={anchor}
         dominantBaseline="middle"
         className="tabular"
@@ -297,7 +325,7 @@ function SankeyNode(props: {
       </text>
       <text
         x={labelX}
-        y={y + height / 2 + 14}
+        y={cy + 7}
         textAnchor={anchor}
         dominantBaseline="middle"
         className="tabular"

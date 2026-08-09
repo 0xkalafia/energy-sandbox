@@ -53,7 +53,9 @@ export function HourlyChart({ hourly }: Props) {
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={data}
-              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              // right clears half of the "23:00" tick, which is centred on the
+              // final gridline and was losing its last pixels to the SVG edge
+              margin={{ top: 10, right: 16, left: -20, bottom: 0 }}
             >
               <defs>
                 {Object.entries({

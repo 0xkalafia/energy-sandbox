@@ -103,7 +103,10 @@ export function SensitivityTornado({ inputs }: Props) {
               <BarChart
                 layout="vertical"
                 data={data}
-                margin={{ top: 8, right: 24, left: 8, bottom: 8 }}
+                // Top has to clear the ReferenceLine's "base ..." caption,
+                // which sits above the plot; right has to clear half of the
+                // last x-axis tick, which is centred on the final gridline.
+                margin={{ top: 20, right: 28, left: 8, bottom: 8 }}
               >
                 <XAxis
                   type="number"
