@@ -56,7 +56,7 @@ export function AnnualViews({ inputs }: Props) {
       {/* Calendar heatmap */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle>Surplus calendar — เดือน × ชั่วโมง</CardTitle>
               <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">

@@ -18,6 +18,8 @@ import { useTheme } from "@/lib/theme";
 import { CommandPalette } from "@/components/CommandPalette";
 import { useKeyboardShortcuts } from "@/lib/useKeyboardShortcuts";
 import { TABS, TAB_IDS } from "@/config/tabs";
+import { cn } from "@/lib/utils";
+import { TOOLBAR_BUTTON } from "@/components/ui/toolbarButton";
 
 // Heavy tab content — lazy load so initial bundle stays lean
 const SankeyDiagram = lazy(() =>
@@ -186,8 +188,10 @@ export default function App() {
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-5 sm:px-6 md:px-8 md:py-6">
           {/* Header */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
+          {/* Wraps rather than overflowing: on a phone the button cluster
+              can't share a line with the title, so it drops below it. */}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-3">
               <button
                 onClick={() => setDrawerOpen(true)}
                 className="mt-1 inline-flex items-center justify-center rounded-md border border-[var(--color-border)] p-2 text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)] lg:hidden"
@@ -209,10 +213,10 @@ export default function App() {
                 </p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
               <button
                 onClick={() => setPaletteOpen(true)}
-                className="hidden items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]/60 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-fg-muted)] backdrop-blur-md transition-all hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)] md:inline-flex"
+                className={cn(TOOLBAR_BUTTON, "hidden md:inline-flex")}
                 title="Open command palette (⌘K)"
                 aria-label="Open command palette"
               >
@@ -225,7 +229,7 @@ export default function App() {
               <ThemeToggle />
               <button
                 onClick={copyLink}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]/60 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-fg-muted)] backdrop-blur-md transition-all hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]"
+                className={TOOLBAR_BUTTON}
                 title="Copy shareable link"
                 aria-label="Copy shareable scenario link"
               >

@@ -73,7 +73,7 @@ export function FinanceBreakdown({ kpis: p }: { kpis: KPIs }) {
         </div>
 
         <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-hover)]/40 p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[11px] text-[var(--color-fg-muted)]">
               Yearly demand
             </span>

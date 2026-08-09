@@ -17,16 +17,28 @@ export function TabsList({
   children: ReactNode;
   className?: string;
 }) {
+  // Ten tabs don't fit a phone. Left to itself the inline-flex list just takes
+  // the width it wants and drags the whole page sideways with it — at 390px
+  // the content pane ended up 790px wide and *everything* scrolled, header
+  // included. The list scrolls inside this wrapper instead; the scrollbar is
+  // hidden because on a phone you swipe, and on a desktop the list fits.
   return (
-    <TabsPrimitive.List
+    <div
       className={cn(
-        "inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)]",
-        "bg-[var(--color-bg-elevated)]/60 p-1 backdrop-blur-md",
-        className,
+        "overflow-x-auto [scrollbar-width:none]",
+        "[&::-webkit-scrollbar]:hidden",
       )}
     >
-      {children}
-    </TabsPrimitive.List>
+      <TabsPrimitive.List
+        className={cn(
+          "inline-flex w-max items-center gap-1 rounded-lg border border-[var(--color-border)]",
+          "bg-[var(--color-bg-elevated)]/60 p-1 backdrop-blur-md",
+          className,
+        )}
+      >
+        {children}
+      </TabsPrimitive.List>
+    </div>
   );
 }
 
@@ -41,7 +53,9 @@ export function TabsTrigger({
     <TabsPrimitive.Trigger
       value={value}
       className={cn(
-        "rounded-md px-3 py-1.5 text-sm font-medium",
+        "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
+        // Comfortable to hit with a thumb; no effect with a mouse.
+        "pointer-coarse:min-h-[36px]",
         "text-[var(--color-fg-muted)] transition-all",
         "hover:text-[var(--color-fg)]",
         "data-[state=active]:bg-[var(--color-bg-hover)]",

@@ -37,6 +37,7 @@ export function SegmentedControl<T extends string | number | boolean>({
           onClick={() => onChange(o.value)}
           className={cn(
             "tabular rounded-md border px-2 py-1 text-[11px] transition-colors",
+            "pointer-coarse:min-h-[36px] pointer-coarse:px-3",
             value === o.value
               ? `${TONE[tone]} text-[var(--color-fg)]`
               : "border-[var(--color-border)] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)]",

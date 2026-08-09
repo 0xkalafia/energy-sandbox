@@ -29,7 +29,7 @@ export function BatteryChart({ hourly, inputs }: Props) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <CardTitle>State of Charge</CardTitle>
             <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">

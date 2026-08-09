@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Save, Download, Trash2, FolderOpen, FileJson, FileSpreadsheet, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { TOOLBAR_BUTTON } from "@/components/ui/toolbarButton";
 import {
   deleteScenario,
   downloadHourlyCSV,
@@ -74,7 +75,7 @@ export function ScenariosMenu({ inputs, hourly, setInputs }: Props) {
     <div className="relative" ref={ref}>
       <button
         onClick={toggleOpen}
-        className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]/60 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-fg-muted)] backdrop-blur-md transition-all hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]"
+        className={TOOLBAR_BUTTON}
         title="Save / load / export scenarios"
         aria-label="Scenarios menu"
       >

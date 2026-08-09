@@ -250,7 +250,7 @@ function MCResults({
 
   return (
     <>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] text-[var(--color-fg-subtle)]">
           {runCount} realizations · percentiles below
         </p>

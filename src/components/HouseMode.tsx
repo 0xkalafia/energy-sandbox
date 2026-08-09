@@ -43,7 +43,7 @@ export function HouseMode() {
       {/* Intro */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Home className="h-4 w-4 text-[var(--color-emerald-glow)]" />
               <div>
@@ -129,7 +129,7 @@ export function HouseMode() {
       {/* 24h chart */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle>วันทั่วไป — โซลาร์ vs โหลด + แบต</CardTitle>
               <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
@@ -198,6 +198,7 @@ export function HouseMode() {
             onClick={() => setH({ ...h, ...b.p })}
             className={cn(
               "rounded-md border border-[var(--color-border)] px-3 py-1.5 text-[11px] text-[var(--color-fg-muted)]",
+              "pointer-coarse:min-h-[36px]",
               "hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]",
             )}
           >

@@ -1,6 +1,7 @@
 import { Moon, Sun, Monitor } from "lucide-react";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { TOOLBAR_BUTTON } from "@/components/ui/toolbarButton";
 
 interface Props {
   className?: string;
@@ -26,7 +27,7 @@ export function ThemeToggle({ className }: Props) {
     <button
       onClick={() => setMode(NEXT_MODE[mode])}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]/60 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-fg-muted)] backdrop-blur-md transition-all hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-fg)]",
+        TOOLBAR_BUTTON,
         className,
       )}
       title={`Theme: ${LABEL[mode]} — click to switch`}

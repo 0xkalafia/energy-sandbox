@@ -36,6 +36,7 @@ export function RunButton({
       disabled={running}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all",
+        "pointer-coarse:min-h-[36px]",
         !running &&
           "border-[var(--color-emerald-glow)]/50 bg-[var(--color-emerald-glow)]/10 text-[var(--color-fg)] hover:bg-[var(--color-emerald-glow)]/20",
         running &&

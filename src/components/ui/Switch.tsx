@@ -14,6 +14,10 @@ export function Switch({ checked, onChange, className }: SwitchProps) {
       onCheckedChange={onChange}
       className={cn(
         "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full",
+        // 20×36 is fine to click and too small to thumb. Grow the hit area
+        // with an invisible overlay rather than the switch itself, so the
+        // control looks identical on every device.
+        "pointer-coarse:after:absolute pointer-coarse:after:-inset-2 pointer-coarse:after:content-['']",
         "border border-[var(--color-border)] transition-colors",
         "data-[state=checked]:bg-[var(--color-emerald-glow)]/30",
         "data-[state=checked]:border-[var(--color-emerald-glow)]",

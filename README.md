@@ -29,25 +29,42 @@ npm run visual     # chart layout audit (dev server must be running)
 
 ### `npm run visual`
 
-Unit tests cover the engine; nothing covered the charts, and layout bugs kept
-slipping through — labels rendered off the left edge, then off the bottom once
-that was fixed, and Sankey ribbons that were invisible in light mode because
-the stroke was a hardcoded near-white.
+Unit tests cover the engine; nothing covered what a visitor sees. Layout bugs
+kept slipping through — labels off the left edge, then off the bottom once that
+was fixed, ribbons invisible in light mode, and on a phone the tab strip
+silently made the whole page 790px wide at a 390px viewport.
 
-This drives the Chrome already installed on the machine (via `playwright-core`,
-so no browser download), walks all ten tabs in **both** colour schemes, and
-fails if any chart text escapes its own SVG on any of the four edges. It also
-warns on labels that collide with each other, and writes full-page PNGs to
-`.visual/<tag>/<scheme>/` so the rendering can be looked at, not just measured.
+It drives the Chrome already installed on the machine (`playwright-core`, so no
+browser download) over the full matrix — **4 screen sizes × 2 colour schemes ×
+10 tabs** — and checks what a visitor would notice without opening devtools:
+
+| | |
+|---|---|
+| PC | 1920×1080 |
+| Notebook | 1440×900 |
+| Tablet | 820×1180, touch |
+| Phone | 390×844, touch + mobile UA |
+
+**Fails** on a pane that scrolls sideways (it names the element that widened
+it), content pushed past the edge where no scroll can reach it, and chart text
+spilling outside its own SVG on any of the four edges. **Warns** on labels
+colliding with each other and tap targets under 32px. Full-page PNGs land in
+`.visual/<tag>/<device>/<scheme>/`, because some faults aren't geometric —
+white-on-white measures perfectly.
 
 ```bash
 npm run dev
-npm run visual -- --tag before   # names the screenshot folder
+npm run visual -- --tag before --only phone
 ```
 
-Kept out of CI on purpose: text metrics depend on the installed fonts, and a
-Linux runner without the Thai font would measure different widths and report
-clipping that doesn't exist on the machine anyone actually uses.
+Every run re-checks its own emulation (viewport width, `pointer`,
+`prefers-color-scheme`) and refuses to be trusted if it drifted. That check
+exists because it caught this script reporting 26px tap targets on buttons that
+were genuinely 36px, and again when a capture trick reflowed a 390px phone
+layout to 830px and produced screenshots of a page nobody has.
+
+Kept out of CI on purpose: text metrics depend on installed fonts, so a Linux
+runner without the Thai font would report clipping that doesn't exist here.
 
 ## Tabs (10)
 

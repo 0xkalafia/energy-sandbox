@@ -43,7 +43,7 @@ export function SpatialMap({ inputs }: Props) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle>Distributed grid — 8 อำเภอ</CardTitle>
               <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
@@ -129,7 +129,7 @@ export function SpatialMap({ inputs }: Props) {
             {/* Selected district detail */}
             <div className="space-y-3">
               <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-hover)]/30 p-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-[var(--color-fg)]">{sel.d.name}</p>
                     <p className="text-[11px] text-[var(--color-fg-subtle)]">{sel.d.en} · {sel.d.role}</p>
