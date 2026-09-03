@@ -27,6 +27,8 @@ npm run build      # production build
 npm run visual     # chart layout audit (dev server must be running)
 npm run mutation   # do the tests actually catch bugs? (Stryker)
 npm run a11y       # axe-core + chart-text contrast, both themes
+npm run keyboard   # tab order, focus trap, chart keyboard layer
+npm run sw:check   # offline + stale-deploy behaviour (needs npm run build)
 ```
 
 ### `npm run visual`
@@ -87,8 +89,33 @@ of this script parsed colours with a regex over `rgba(...)` — the palette is
 OKLCH — matched nothing, and reported a clean sweep of a file it had never
 looked at.
 
-Not covered: keyboard traversal and focus order, the mobile drawer's missing
-focus trap, and text alternatives for the charts themselves.
+### `npm run keyboard`
+
+The part axe can't judge: whether you can reach a control, see where you are,
+and get back out of an overlay. Tab order was already sound — 35 stops, all on
+screen, all with a focus ring. Two gaps weren't: the mobile drawer had no
+focus trap and ignored Escape, and the charts sat in the tab order announcing
+themselves as an unnamed "application" (recharts sets `role="application"`
+with arrow-key navigation of the data points — good, but only once the chart
+has a name). Both fixed; all sixteen chart instances across the ten tabs are
+now labelled.
+
+Its first version tested the drawer through a `[data-drawer]` attribute that
+didn't exist, so "Escape closes it" passed against an app with no Escape
+handler at all.
+
+### `npm run sw:check`
+
+The service worker had never run: registration is skipped on `localhost`, so
+`npm run dev` never touched it. Served from 127.0.0.1 — a secure context that
+clears that guard — a production build exercises the real thing. Checks that it
+installs, that the app opens offline, and what happens to an open tab when a
+new build ships (reproduced by moving one lazy chunk out of `dist`).
+
+That last case is why navigations are network-first: serving a cached index
+after a deploy hands the browser a list of chunk hashes that no longer exist.
+Hashed assets stay cache-first, since their name changes when their contents
+do.
 
 ## Tabs (10)
 
