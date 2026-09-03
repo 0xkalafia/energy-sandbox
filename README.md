@@ -13,109 +13,26 @@ update in real time.
 
 - **Vite** + **React 19** + **TypeScript**, **Tailwind CSS v4** (`@theme` tokens)
 - **Recharts** charts · **Radix UI** primitives · **cmdk** command palette · **Sonner** toasts
-- **Vitest** engine tests · web-worker Monte Carlo
+- **Vitest** engine tests · web-worker Monte Carlo · installable PWA
+- Verification: **Stryker** (mutation) · **playwright-core** + **axe-core**, driving the
+  Chrome already on the machine
 
 ## Quick start
 
 ```bash
 npm install
 npm run dev        # → http://localhost:5173
-npm run lint       # ESLint (CI gate)
-npm test           # engine unit tests (Vitest)
-npm run typecheck  # tsc --noEmit
-npm run build      # production build
-npm run visual     # chart layout audit (dev server must be running)
-npm run mutation   # do the tests actually catch bugs? (Stryker)
-npm run a11y       # axe-core + chart-text contrast, both themes
-npm run keyboard   # tab order, focus trap, chart keyboard layer
-npm run sw:check   # offline + stale-deploy behaviour (needs npm run build)
+npm run dev:host   # …also reachable from a phone on the same Wi-Fi
 ```
-
-### `npm run visual`
-
-Unit tests cover the engine; nothing covered what a visitor sees. Layout bugs
-kept slipping through — labels off the left edge, then off the bottom once that
-was fixed, ribbons invisible in light mode, and on a phone the tab strip
-silently made the whole page 790px wide at a 390px viewport.
-
-It drives the Chrome already installed on the machine (`playwright-core`, so no
-browser download) over the full matrix — **4 screen sizes × 2 colour schemes ×
-10 tabs** — and checks what a visitor would notice without opening devtools:
 
 | | |
 |---|---|
-| PC | 1920×1080 |
-| Notebook | 1440×900 |
-| Tablet | 820×1180, touch |
-| Phone | 390×844, touch + mobile UA |
+| `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` | the CI gate |
+| `npm run mutation` | do the tests actually catch bugs? |
+| `npm run visual` · `npm run a11y` · `npm run keyboard` | needs a dev server |
+| `npm run sw:check` | needs `npm run build` first |
 
-**Fails** on a pane that scrolls sideways (it names the element that widened
-it), content pushed past the edge where no scroll can reach it, and chart text
-spilling outside its own SVG on any of the four edges. **Warns** on labels
-colliding with each other and tap targets under 32px. Full-page PNGs land in
-`.visual/<tag>/<device>/<scheme>/`, because some faults aren't geometric —
-white-on-white measures perfectly.
-
-```bash
-npm run dev
-npm run visual -- --tag before --only phone
-```
-
-Every run re-checks its own emulation (viewport width, `pointer`,
-`prefers-color-scheme`) and refuses to be trusted if it drifted. That check
-exists because it caught this script reporting 26px tap targets on buttons that
-were genuinely 36px, and again when a capture trick reflowed a 390px phone
-layout to 830px and produced screenshots of a page nobody has.
-
-Kept out of CI on purpose: text metrics depend on installed fonts, so a Linux
-runner without the Thai font would report clipping that doesn't exist here.
-
-### `npm run a11y`
-
-axe-core injected into the real page, all ten tabs in both schemes, plus a
-contrast pass over SVG chart text — which axe doesn't look at, and which is
-where most of this app's words live.
-
-First run: 26 failures. Every slider was unnamed (a Radix composite puts
-`role="slider"` on a span, out of reach of `htmlFor`), so `Field` and
-`ModuleRow` now pass their label id down through context. Dark-mode axis
-labels sat at 3.01:1 against 4.5 required. And chasing the last two turned up
-a real bug: on a fresh light-mode load the first tab's charts were painted in
-*dark* theme colours, because `applyTheme` ran an effect too late for
-`useChartTheme` to sample the right variables.
-
-Each run reports how many chart labels it measured, because an early version
-of this script parsed colours with a regex over `rgba(...)` — the palette is
-OKLCH — matched nothing, and reported a clean sweep of a file it had never
-looked at.
-
-### `npm run keyboard`
-
-The part axe can't judge: whether you can reach a control, see where you are,
-and get back out of an overlay. Tab order was already sound — 35 stops, all on
-screen, all with a focus ring. Two gaps weren't: the mobile drawer had no
-focus trap and ignored Escape, and the charts sat in the tab order announcing
-themselves as an unnamed "application" (recharts sets `role="application"`
-with arrow-key navigation of the data points — good, but only once the chart
-has a name). Both fixed; all sixteen chart instances across the ten tabs are
-now labelled.
-
-Its first version tested the drawer through a `[data-drawer]` attribute that
-didn't exist, so "Escape closes it" passed against an app with no Escape
-handler at all.
-
-### `npm run sw:check`
-
-The service worker had never run: registration is skipped on `localhost`, so
-`npm run dev` never touched it. Served from 127.0.0.1 — a secure context that
-clears that guard — a production build exercises the real thing. Checks that it
-installs, that the app opens offline, and what happens to an open tab when a
-new build ships (reproduced by moving one lazy chunk out of `dist`).
-
-That last case is why navigations are network-first: serving a cached index
-after a deploy hands the browser a list of chunk hashes that no longer exist.
-Hashed assets stay cache-first, since their name changes when their contents
-do.
+See [Verification](#verification) for what each one checks and what it found.
 
 ## Tabs (10)
 
@@ -146,13 +63,16 @@ Pure, testable functions in `src/engine/`:
    (missions, curtailable). Order: renewables → battery → grid(capped) → shed.
    `unmet` = critical blackout; `curtailed` = flexible deferred. Grid-backed by
    default (unmet ≡ 0); set `gridLimitMW: 0` for an islanded stress test.
-3. **`simulateMultiDay`** — chains real battery SoC day-to-day.
-4. **`projectMultiYear`** — degradation + augmentation + EV adoption + carbon band.
-5. **`runMonteCarlo`** / **`runFinancialMC`** — seeded stochastic weather (off
+3. **`shapeShiftable`** — water-fills a curtailable plant's daily energy into
+   the hours with the most surplus. Daily energy is conserved exactly; a
+   turndown floor and a boost ceiling keep the profile physical.
+4. **`simulateMultiDay`** — chains real battery SoC day-to-day.
+5. **`projectMultiYear`** — degradation + augmentation + EV adoption + carbon band.
+6. **`runMonteCarlo`** / **`runFinancialMC`** — seeded stochastic weather (off
    the main thread) and financial-driver uncertainty → payback distribution.
-6. **`optimizeResilientMix`** — grid-search the cheapest solar×battery that
+7. **`optimizeResilientMix`** — grid-search the cheapest solar×battery that
    survives an islanded monsoon. **`computeSensitivity`** — ±N% tornado.
-7. **`annualGrid` / `timeline`** — a 12-month representative year and the
+8. **`annualGrid` / `timeline`** — a 12-month representative year and the
    2026→2046 build-out. **`simulateHouse`** — the residential model.
 
 Lifestyle load flexes with the season (summer cooling +20%), and annual figures
@@ -164,58 +84,182 @@ than an on/off toggle, so a scenario that builds a tenth of the plan isn't
 charged for the whole thing. Scenario JSON and share links are validated before
 they reach the engine.
 
+### Things the model says that the plan's authors didn't expect
+
+Written down because each one contradicts an assumption someone held, and each
+is pinned by a test so it can't drift back quietly:
+
+- **More solar makes payback worse.** The baseline is already past the point
+  where extra panels pay for themselves; methanol price is what pulls payback
+  down.
+- **Smart dispatch doesn't pay at ฿525/kWh.** Shifting DAC/desal/methanol into
+  the sunny hours needs a plant sized for the peak, and that costs more than
+  storing the energy until battery prices pass roughly ฿6,000/kWh. Off by
+  default; tests lock both sides of that crossover.
+- **The plan islands for a fortnight without a blackout**, monsoon included.
+  Critical load is 7.5 of ~41 GWh/day and the missions curtail first, so there
+  is far more headroom than the resilience tab's framing suggests.
+
+## When something breaks
+
+Two error boundaries: one around the tab panels from inside `<Tabs>`, so the
+strip stays clickable and switching tabs clears the error, and one at the root
+for everything else. Without them a render error anywhere left React with an
+empty tree — a blank white page with nothing to click.
+
+The likeliest cause isn't a bug in the code. Every tab past the first is a lazy
+chunk, so shipping a new build while someone has the page open makes their next
+tab click ask for a hash that no longer exists. The fallback tells that case
+apart from a real bug and offers the recovery that actually works: clear the
+caches and reload, rather than "try again".
+
 ## What this is *not*
 
 A **scenario sandbox**, not an authoritative forecast. Cost/efficiency/load
 assumptions live in `src/data/constants.ts` — edit them to fit your own priors.
 
-## Tests
+## Verification
 
-`npm test` (376 tests) covers energy conservation, the islanded blackout path,
-seasonal demand tie-out, methanol split, real SoC chaining, the 20-year
-projection (degradation, augmentation, EV S-curve, carbon band, IRR), both
-Monte Carlos, the sensitivity tornado's ordering, the optimizer's min-CAPEX
-feasibility, the 2026→2046 build-out, district-allocation conservation, the
-residential model (marginal battery payback, DoD floor), share-link round
-trips, and untrusted-input validation.
+Five checks, because unit tests only ever covered the engine and most of this
+app's surface isn't the engine.
+
+| Check | Asks | Where it runs |
+|---|---|---|
+| `npm test` | does the engine compute the right numbers? | node |
+| `npm run mutation` | would the tests notice if it didn't? | node |
+| `npm run visual` | does it lay out correctly on real screens? | real Chrome |
+| `npm run a11y` | can it be read? | real Chrome |
+| `npm run keyboard` | can it be used without a mouse? | real Chrome |
+| `npm run sw:check` | does it work offline, and survive a deploy? | real Chrome |
+
+The four browser checks drive the Chrome already installed on the machine via
+`playwright-core`, so there's no browser download. None of them are in CI:
+text metrics depend on installed fonts, and a Linux runner without the Thai
+font would report failures that don't exist here.
+
+### `npm test` — 376 tests
+
+Energy conservation, the islanded blackout path, seasonal demand tie-out, the
+methanol split, real SoC chaining, the 20-year projection (degradation,
+augmentation, EV S-curve, carbon band, IRR), both Monte Carlos, the tornado's
+ordering, the optimizer's min-CAPEX feasibility, the 2026→2046 build-out,
+district-allocation conservation, the residential model (marginal battery
+payback, DoD floor), share-link round trips, and untrusted-input validation.
 
 A **boundary sweep** asserts no NaN/Infinity for every value the sliders and the
-importer allow — battery at 0, no supply, all missions off, round-trip 0. That
-class of bug previously had no coverage.
+importer allow — battery at 0, no supply, all missions off, round-trip 0.
 
-### `npm run mutation`
+### `npm run mutation` — 79%
 
 A green suite proves the code ran, not that anything would have noticed it
 being wrong. Stryker changes the engine on purpose — flips a comparison, drops
-a clamp, swaps `+` for `-` — and reports how many of those survive. The first
-run killed **36%**. Three modules had no test touching them at all.
+a clamp, swaps `+` for `-` — and reports how many survive. The first run killed
+**36%**, with three modules that no test touched at all.
 
-It's at **79%** now, and the gaps it exposed were real: the tornado's ordering
-was untested even though the app reads "biggest lever" straight off `rows[0]`;
-the twenty-year projection was at 21%; `stats.ts`, which backs both Monte
-Carlos, was at 8%; and `simulate.ts` — the file every other number comes from
-— was at 63%. Per-module scores and the surviving mutants land in
+It's at **79%** now (engine 82%), and the gaps were real: the tornado's
+ordering was untested even though the app reads "biggest lever" straight off
+`rows[0]`; the twenty-year projection was at 21%; `stats.ts`, behind both Monte
+Carlos, was at 8%; `simulate.ts` — the file every other number comes from — was
+at 63%. Per-module scores and the surviving mutants land in
 `reports/mutation/index.html`.
 
-Three tests written for that pass failed on first run and all three were wrong
-about the code, which is the useful part:
+Four tests written during those passes failed on first run, and all four were
+wrong about the code rather than the other way round. Three are in "Things the
+model says" above; the fourth is that `shapeShiftable`'s second pass ignores
+headroom on purpose — the first chases real surplus, and once that's gone the
+remaining energy still has to be placed, which is what makes a monsoon day
+degrade back toward flat instead of silently losing production.
 
-- More solar makes payback **worse** in the baseline scenario. The plan is
-  already past the point where extra panels pay for themselves.
-- The plan **islands for a fortnight of random weather without a single
-  blackout**, monsoon included — critical load is 7.5 of ~41 GWh/day and the
-  missions curtail first. Making islanding fail takes a starved scenario.
-- No share link this app can generate produces a `+` or `/` in base64: 0 of
-  20,000 tried. The substitution is correct and currently unreachable.
+Also worth recording: no share link this app can generate produces a `+` or `/`
+in base64 — 0 of 20,000 tried, since every field is a number or a fixed season
+string. The URL-safe substitution is correct and currently unreachable.
 
-Still weak, worst first: `scenarios.ts` 34% — though 76% of its *covered*
-code, the rest being browser download plumbing vitest can't reach — then
-`annual.ts` 68%, `multiDay.ts` 68%, `monteCarlo.ts` 72%, `sensitivity.ts` 78%.
-The engine as a whole sits at 82%.
+Still weak, worst first: `scenarios.ts` 34% — though 76% of its *covered* code,
+the rest being browser download plumbing vitest can't reach — then `annual.ts`
+68%, `multiDay.ts` 68%, `monteCarlo.ts` 72%, `sensitivity.ts` 78%.
 
-Scoped to the pure modules. Components, and the four DOM-bound hooks, are
-checked in a real browser by `npm run visual`, `npm run a11y` and
-`npm run keyboard` instead — leaving them in scope would report them as
-untested when they aren't. Not in CI — a full run is several minutes.
+Scoped to the pure modules; components and the four DOM-bound hooks are covered
+by the browser checks instead, and leaving them in scope would report them as
+untested when they aren't.
 
-CI (`.github/workflows/ci.yml`) runs lint + typecheck + tests + build on every push.
+### `npm run visual`
+
+Layout bugs kept slipping through — labels off the left edge, then off the
+bottom once that was fixed, ribbons invisible in light mode, and on a phone the
+tab strip silently made the whole page 790px wide at a 390px viewport.
+
+**4 screen sizes × 2 colour schemes × 10 tabs**:
+
+| | |
+|---|---|
+| PC | 1920×1080 |
+| Notebook | 1440×900 |
+| Tablet | 820×1180, touch |
+| Phone | 390×844, touch + mobile UA |
+
+**Fails** on a pane that scrolls sideways (naming the element that widened it),
+content pushed past the edge where no scroll reaches it, and chart text
+spilling outside its own SVG on any of the four edges. **Warns** on colliding
+labels and tap targets under 32px. Full-page PNGs land in
+`.visual/<tag>/<device>/<scheme>/`, because some faults aren't geometric —
+white-on-white measures perfectly.
+
+```bash
+npm run dev
+npm run visual -- --tag before --only phone
+```
+
+Every run re-checks its own emulation (viewport width, `pointer`,
+`prefers-color-scheme`) and refuses to be trusted if it drifted. That exists
+because the script once reported 26px tap targets on buttons that were
+genuinely 36px, and again because a capture trick reflowed a 390px phone layout
+to 830px and produced screenshots of a page nobody has.
+
+### `npm run a11y`
+
+axe-core in the real page, all ten tabs in both schemes, plus a contrast pass
+over SVG chart text — which axe doesn't look at, and which is where most of
+this app's words live.
+
+First run: 26 failures. Every slider was unnamed (a Radix composite puts
+`role="slider"` on a span, out of reach of `htmlFor`), so `Field` and
+`ModuleRow` now pass their label id down through context. Dark-mode axis labels
+sat at 3.01:1 against 4.5 required. And chasing the last two turned up a real
+bug: on a fresh light-mode load the first tab's charts were painted in *dark*
+theme colours, because `applyTheme` ran in an effect — one render too late for
+`useChartTheme` to sample the right variables.
+
+Each run reports how many chart labels it measured, because an early version
+parsed colours with a regex over `rgba(...)`. The palette is OKLCH; it matched
+nothing and reported a clean sweep of a file it had never looked at.
+
+### `npm run keyboard`
+
+Whether you can reach a control, see where you are, and get back out of an
+overlay. Tab order was already sound — 35 stops, all on screen, all with a
+focus ring. Two gaps weren't: the mobile drawer had no focus trap and ignored
+Escape, and the charts sat in the tab order announcing themselves as an unnamed
+"application" (recharts sets `role="application"` with arrow-key navigation of
+the data points — good, but only once the chart has a name). Both fixed; all
+sixteen chart instances across the ten tabs are labelled.
+
+Its first version tested the drawer through a `[data-drawer]` attribute that
+didn't exist, so "Escape closes it" passed against an app with no Escape
+handler at all.
+
+### `npm run sw:check`
+
+The service worker had never run: registration is skipped on `localhost`, so
+`npm run dev` never touched it. Served from 127.0.0.1 — a secure context that
+clears that guard — a production build exercises the real thing. Checks that it
+installs, that the app opens offline, and what happens to an open tab when a
+new build ships (reproduced by moving one lazy chunk out of `dist`).
+
+That last case is why navigations are network-first: serving a cached index
+after a deploy hands the browser a list of chunk hashes that no longer exist.
+Hashed assets stay cache-first, since their name changes when their contents do.
+
+## CI
+
+`.github/workflows/ci.yml` runs lint + typecheck + tests + build on every push.
+The mutation and browser checks are local-only — see above for why.
