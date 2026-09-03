@@ -43,6 +43,7 @@ export function BatteryChart({ hourly, inputs }: Props) {
         <div className="h-[220px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
+              aria-label="สถานะประจุแบตเตอรี่ตลอด 24 ชั่วโมง เป็นเปอร์เซ็นต์"
               data={data}
               margin={{ top: 10, right: 16, left: -20, bottom: 0 }}
             >

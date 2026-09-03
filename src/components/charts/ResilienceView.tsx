@@ -176,6 +176,7 @@ export function ResilienceView({ inputs }: Props) {
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
+                aria-label="ประจุแบตเตอรี่ต่อเนื่องหลายวัน พร้อมเส้นขีดจำกัด DoD"
                 data={result.hourly.map((h) => ({
                   hour: h.globalHour,
                   day: h.day,
@@ -262,6 +263,7 @@ export function ResilienceView({ inputs }: Props) {
           <div className="h-[260px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
+                aria-label="กำลังผลิตเทียบความต้องการรายวัน วันเกินและวันขาด"
                 data={result.daily.map((d) => ({
                   day: `d${d.day + 1}`,
                   Supply: +d.supplyGWh.toFixed(2),

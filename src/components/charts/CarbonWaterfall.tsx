@@ -77,6 +77,7 @@ export function CarbonWaterfall({ kpis }: Props) {
         <div className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
+              aria-label="สมดุลคาร์บอน — การปล่อยเทียบกับการดึงกลับ หน่วยตันต่อปี"
               data={data}
               margin={{ top: 16, right: 10, left: 0, bottom: 0 }}
             >

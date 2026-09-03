@@ -254,6 +254,7 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
           <div className="h-[360px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
+                aria-label="กระแสเงินสดสะสม 20 ปี พร้อมช่วงความไม่แน่นอนของราคาคาร์บอน"
                 data={data}
                 margin={{ top: 16, right: 16, left: 0, bottom: 0 }}
               >
@@ -323,6 +324,7 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
           <div className="h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
+                aria-label="การเปลี่ยนผ่านสู่ EV และโหลดที่โตตามในแต่ละปี"
                 data={projection.rows.map((r) => ({
                   year: `Y${r.year}`,
                   EV: +(r.evPenetration * 100).toFixed(1),

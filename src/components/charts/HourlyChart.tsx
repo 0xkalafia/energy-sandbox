@@ -52,6 +52,7 @@ export function HourlyChart({ hourly }: Props) {
         <div className="h-[320px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
+              aria-label="กราฟกำลังผลิตรายชั่วโมงแยกตามแหล่ง เทียบกับเส้นความต้องการ หน่วย MW"
               data={data}
               // right clears half of the "23:00" tick, which is centred on the
               // final gridline and was losing its last pixels to the SVG edge

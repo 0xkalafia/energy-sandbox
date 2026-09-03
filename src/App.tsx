@@ -17,6 +17,7 @@ import { Toaster, toast } from "sonner";
 import { useTheme } from "@/lib/theme";
 import { CommandPalette } from "@/components/CommandPalette";
 import { useKeyboardShortcuts } from "@/lib/useKeyboardShortcuts";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { TABS, TAB_IDS } from "@/config/tabs";
 import { cn } from "@/lib/utils";
 import { TOOLBAR_BUTTON } from "@/components/ui/toolbarButton";
@@ -85,6 +86,11 @@ export default function App() {
     return fromHash ?? DEFAULT_INPUTS;
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Focus goes in when the drawer opens, stays inside while it's there, and
+  // comes back to the opening button on close.
+  const drawerRef = useFocusTrap<HTMLDivElement>(drawerOpen, () =>
+    setDrawerOpen(false),
+  );
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -175,8 +181,17 @@ export default function App() {
           <div
             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
             onClick={() => setDrawerOpen(false)}
+            aria-hidden="true"
           />
-          <div className="fixed inset-y-0 left-0 z-50 w-[88vw] max-w-[360px] lg:hidden">
+          <div
+            ref={drawerRef}
+            data-drawer
+            role="dialog"
+            aria-modal="true"
+            aria-label="Simulation controls"
+            tabIndex={-1}
+            className="fixed inset-y-0 left-0 z-50 w-[88vw] max-w-[360px] lg:hidden"
+          >
             <Sidebar
               inputs={inputs}
               setInputs={setInputs}

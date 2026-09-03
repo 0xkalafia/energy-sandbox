@@ -136,6 +136,7 @@ export function FinancialMonteCarlo({ inputs }: Props) {
               <div className="h-[240px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
+                    aria-label="การกระจายตัวของระยะเวลาคืนทุนจากการสุ่มราคา"
                     data={hist.map((h) => ({ label: `${h.lo.toFixed(0)}`, count: h.count, lo: h.lo }))}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >

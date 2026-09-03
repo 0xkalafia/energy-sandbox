@@ -101,6 +101,7 @@ export function SensitivityTornado({ inputs }: Props) {
           >
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
+                aria-label="Tornado — อินพุตที่มีผลต่อผลลัพธ์มากที่สุด เรียงจากมากไปน้อย"
                 layout="vertical"
                 data={data}
                 // Top has to clear the ReferenceLine's "base ..." caption,

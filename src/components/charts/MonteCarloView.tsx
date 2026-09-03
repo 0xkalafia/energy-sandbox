@@ -310,6 +310,7 @@ function HistogramChart({
     <div className="h-[220px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
+          aria-label="ฮิสโทแกรมผลการจำลองสภาพอากาศแบบสุ่ม"
           data={data.map((d) => ({
             label: `${d.lo.toFixed(0)}${unit}`,
             count: d.count,
