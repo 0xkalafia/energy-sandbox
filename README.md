@@ -171,7 +171,7 @@ assumptions live in `src/data/constants.ts` — edit them to fit your own priors
 
 ## Tests
 
-`npm test` (233 tests) covers energy conservation, the islanded blackout path,
+`npm test` (376 tests) covers energy conservation, the islanded blackout path,
 seasonal demand tie-out, methanol split, real SoC chaining, the 20-year
 projection (degradation, augmentation, EV S-curve, carbon band, IRR), both
 Monte Carlos, the sensitivity tornado's ordering, the optimizer's min-CAPEX
@@ -190,10 +190,11 @@ being wrong. Stryker changes the engine on purpose — flips a comparison, drops
 a clamp, swaps `+` for `-` — and reports how many of those survive. The first
 run killed **36%**. Three modules had no test touching them at all.
 
-It's at **67%** now, and the gaps it exposed were real: the tornado's ordering
+It's at **79%** now, and the gaps it exposed were real: the tornado's ordering
 was untested even though the app reads "biggest lever" straight off `rows[0]`;
 the twenty-year projection was at 21%; `stats.ts`, which backs both Monte
-Carlos, was at 8%. Per-module scores and the surviving mutants land in
+Carlos, was at 8%; and `simulate.ts` — the file every other number comes from
+— was at 63%. Per-module scores and the surviving mutants land in
 `reports/mutation/index.html`.
 
 Three tests written for that pass failed on first run and all three were wrong
@@ -207,11 +208,14 @@ about the code, which is the useful part:
 - No share link this app can generate produces a `+` or `/` in base64: 0 of
   20,000 tried. The substitution is correct and currently unreachable.
 
-Still weak, in rough order of effort: `annual.ts` 35%, `optimize.ts` 45%,
-`multiDay.ts` 53%, `house.ts` 56%, `simulate.ts` 63% — the last has the most
-surviving mutants in absolute terms and is the core of the engine.
+Still weak, worst first: `scenarios.ts` 34% — though 76% of its *covered*
+code, the rest being browser download plumbing vitest can't reach — then
+`annual.ts` 68%, `multiDay.ts` 68%, `monteCarlo.ts` 72%, `sensitivity.ts` 78%.
+The engine as a whole sits at 82%.
 
-Scoped to the pure modules; components are checked in a real browser by
-`npm run visual` instead. Not in CI — a full run is several minutes.
+Scoped to the pure modules. Components, and the four DOM-bound hooks, are
+checked in a real browser by `npm run visual`, `npm run a11y` and
+`npm run keyboard` instead — leaving them in scope would report them as
+untested when they aren't. Not in CI — a full run is several minutes.
 
 CI (`.github/workflows/ci.yml`) runs lint + typecheck + tests + build on every push.
