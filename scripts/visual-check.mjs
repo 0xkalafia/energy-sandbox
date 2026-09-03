@@ -126,6 +126,14 @@ function auditPage([isTouch, minTap]) {
     if (past <= 1) continue;
     if ([...el.children].some((c) => c.getBoundingClientRect().right - vw > 1))
       continue;
+    // Only things a visitor could actually be deprived of. Decoration that
+    // overflows a parent built to clip it is doing its job — the loading
+    // skeleton's shimmer is an `inset-0` overlay inside an overflow-hidden
+    // box, and reporting it as lost content was pure noise.
+    const meaningful =
+      (el.textContent ?? "").trim().length > 0 ||
+      el.matches('button, a, input, select, textarea, img, [role], [aria-label]');
+    if (!meaningful) continue;
     let reachable = false;
     for (let p = el.parentElement; p; p = p.parentElement) {
       const ox = getComputedStyle(p).overflowX;
@@ -323,6 +331,16 @@ for (const device of DEVICES) {
           );
         }, i + 1);
       }
+      // Most panels are lazy chunks behind a skeleton. Measuring while that
+      // is still up reads the placeholder's geometry, not the chart's — it
+      // produced a 300px "overflow" that existed for a few hundred ms and was
+      // never on screen when the page had settled.
+      await page
+        .waitForFunction(
+          () => !document.querySelector('[class*="animate-[shimmer"]'),
+          { timeout: 8000 },
+        )
+        .catch(() => {});
       await page.waitForTimeout(900);
 
       const r = await page.evaluate(auditPage, [!!device.touch, MIN_TAP]);

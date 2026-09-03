@@ -20,6 +20,7 @@ import { useKeyboardShortcuts } from "@/lib/useKeyboardShortcuts";
 import { TABS, TAB_IDS } from "@/config/tabs";
 import { cn } from "@/lib/utils";
 import { TOOLBAR_BUTTON } from "@/components/ui/toolbarButton";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Heavy tab content — lazy load so initial bundle stays lean
 const SankeyDiagram = lazy(() =>
@@ -262,6 +263,13 @@ export default function App() {
               ))}
             </TabsList>
 
+            {/* Inside <Tabs> but wrapping only the panels: if one blows up,
+                the strip above is still mounted, so you can click your way
+                out — and doing so changes resetKey, which clears the error. */}
+            <ErrorBoundary
+              resetKey={activeTab}
+              label={TABS.find((t) => t.id === activeTab)?.label}
+            >
             <TabsContent value="overview" className="mt-6 space-y-6">
               <KPIGrid kpis={kpis} />
               <HourlyChart hourly={hourly} />
@@ -359,6 +367,7 @@ export default function App() {
                 <HouseMode />
               </Suspense>
             </TabsContent>
+            </ErrorBoundary>
           </Tabs>
 
           {/* Footer */}
