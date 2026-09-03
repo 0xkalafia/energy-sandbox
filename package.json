@@ -14,7 +14,8 @@
     "mutation": "stryker run",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "visual": "node scripts/visual-check.mjs",
-    "a11y": "node scripts/a11y-check.mjs"
+    "a11y": "node scripts/a11y-check.mjs",
+    "sw:check": "node scripts/sw-check.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
