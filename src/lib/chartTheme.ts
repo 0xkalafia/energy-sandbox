@@ -39,6 +39,22 @@ export interface ChartTheme {
   grid: string;
   borderStrong: string;
   fg: string;
+  /**
+   * Accent colours for chart *text*, read live from the CSS variables.
+   *
+   * SERIES above is for marks — a line, a bar, an area — where WCAG asks for
+   * 3:1 against the background. Text needs 4.5:1, and the fixed SERIES values
+   * don't clear it on a light background: the "DoD floor" caption drawn in
+   * SERIES.rose measured 2.83:1. The CSS variables carry a darker accent for
+   * the light theme, so anything written in words takes them instead.
+   */
+  accent: {
+    emerald: string;
+    amber: string;
+    rose: string;
+    sky: string;
+    violet: string;
+  };
   /** Spread onto <XAxis>/<YAxis> for consistent styling. */
   axisProps: {
     stroke: string;
@@ -66,6 +82,15 @@ export function useChartTheme(): ChartTheme {
     let grid = FALLBACK.grid;
     let borderStrong = FALLBACK.borderStrong;
     let fg = FALLBACK.fg;
+    // `as const` on SERIES narrows each entry to its own literal type, so the
+    // fallbacks need widening before the live values can replace them.
+    let accent: ChartTheme["accent"] = {
+      emerald: SERIES.emerald,
+      amber: SERIES.amber,
+      rose: SERIES.rose,
+      sky: SERIES.sky,
+      violet: SERIES.violet,
+    };
 
     if (typeof document !== "undefined") {
       const cs = getComputedStyle(document.documentElement);
@@ -75,6 +100,13 @@ export function useChartTheme(): ChartTheme {
       grid = read("--color-border", FALLBACK.grid);
       borderStrong = read("--color-border-strong", FALLBACK.borderStrong);
       fg = read("--color-fg", FALLBACK.fg);
+      accent = {
+        emerald: read("--color-emerald-glow", SERIES.emerald),
+        amber: read("--color-amber-glow", SERIES.amber),
+        rose: read("--color-rose-glow", SERIES.rose),
+        sky: read("--color-sky-glow", SERIES.sky),
+        violet: read("--color-violet-glow", SERIES.violet),
+      };
     }
 
     return {
@@ -82,6 +114,7 @@ export function useChartTheme(): ChartTheme {
       grid,
       borderStrong,
       fg,
+      accent,
       axisProps: {
         stroke: axis,
         tick: { fontSize: 10 },

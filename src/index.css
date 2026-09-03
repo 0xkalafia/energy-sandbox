@@ -16,7 +16,10 @@
   --color-border-strong: oklch(0.36 0.01 270);
   --color-fg: oklch(0.96 0.005 270);
   --color-fg-muted: oklch(0.7 0.01 270);
-  --color-fg-subtle: oklch(0.5 0.01 270);
+  /* 0.50 measured 3.01:1 on a card — chart axis labels are painted in this
+     and were the single most widespread WCAG AA failure in the app. 0.62
+     lifts them to 4.97:1 and still reads as the quietest of the three. */
+  --color-fg-subtle: oklch(0.62 0.01 270);
 
   /* Accents stay similar in both themes — slightly more saturated in light */
   --color-emerald-glow: oklch(0.78 0.18 155);
@@ -36,7 +39,10 @@
   --color-border-strong: oklch(0.36 0.01 270);
   --color-fg: oklch(0.96 0.005 270);
   --color-fg-muted: oklch(0.7 0.01 270);
-  --color-fg-subtle: oklch(0.5 0.01 270);
+  /* 0.50 measured 3.01:1 on a card — chart axis labels are painted in this
+     and were the single most widespread WCAG AA failure in the app. 0.62
+     lifts them to 4.97:1 and still reads as the quietest of the three. */
+  --color-fg-subtle: oklch(0.62 0.01 270);
 
   --bg-glow-1: oklch(0.22 0.05 280 / 0.4);
   --bg-glow-2: oklch(0.22 0.05 200 / 0.3);
@@ -55,7 +61,8 @@
   /* Slightly darker accents for contrast on light bg */
   --color-emerald-glow: oklch(0.58 0.18 155);
   --color-amber-glow: oklch(0.65 0.17 75);
-  --color-rose-glow: oklch(0.6 0.2 20);
+  /* 0.60 gave the "DoD floor" reference label only 4.38:1 on white. */
+  --color-rose-glow: oklch(0.52 0.2 20);
   --color-sky-glow: oklch(0.58 0.15 235);
   --color-violet-glow: oklch(0.55 0.2 290);
 

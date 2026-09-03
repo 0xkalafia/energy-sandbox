@@ -1,6 +1,8 @@
+import { useId } from "react";
 import { Slider } from "@/components/ui/Slider";
 import { Switch } from "@/components/ui/Switch";
 import { Field } from "@/components/ui/Field";
+import { FieldLabelContext } from "@/components/ui/fieldLabel";
 import { Badge } from "@/components/ui/Badge";
 import type { SimInputs } from "@/data/types";
 import { SEASONS } from "@/data/types";
@@ -171,6 +173,7 @@ export function Sidebar({ inputs, setInputs, onClose }: Props) {
               </p>
             </div>
             <Switch
+              label="Smart dispatch"
               checked={inputs.smartDispatch}
               onChange={(v) => update("smartDispatch", v)}
             />
@@ -432,6 +435,9 @@ function ModuleRow({
   locked?: boolean;
   children?: React.ReactNode;
 }) {
+  // Same reasoning as Field: the slider nested in here is a Radix composite,
+  // so <label htmlFor> can't reach it. Name it after the row's own heading.
+  const labelId = useId();
   return (
     <div
       className={cn(
@@ -445,6 +451,7 @@ function ModuleRow({
         <div className="flex min-w-0 items-center gap-1.5">
           {icon}
           <span
+            id={labelId}
             className={cn(
               "truncate text-xs font-medium",
               on ? "text-[var(--color-fg)]" : "text-[var(--color-fg-subtle)]",
@@ -456,7 +463,7 @@ function ModuleRow({
         {locked ? (
           <Badge tone="neutral">locked</Badge>
         ) : (
-          onToggle && <Switch checked={on} onChange={onToggle} />
+          onToggle && <Switch label={label} checked={on} onChange={onToggle} />
         )}
       </div>
       {description && (
@@ -464,7 +471,9 @@ function ModuleRow({
           {description}
         </div>
       )}
-      {children}
+      <FieldLabelContext.Provider value={labelId}>
+        {children}
+      </FieldLabelContext.Provider>
     </div>
   );
 }

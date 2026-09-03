@@ -61,7 +61,14 @@ export function TimeMachine({ inputs }: Props) {
           </div>
         </CardHeader>
         <CardContent>
-          <Slider value={year} onChange={setYear} min={START_YEAR} max={END_YEAR} step={1} />
+          <Slider
+            label="ปีที่จำลอง"
+            value={year}
+            onChange={setYear}
+            min={START_YEAR}
+            max={END_YEAR}
+            step={1}
+          />
           <div className="mt-2 flex justify-between text-[10px] text-[var(--color-fg-subtle)]">
             <span>{START_YEAR} วันนี้</span>
             <span>{END_YEAR} แผนเต็ม</span>

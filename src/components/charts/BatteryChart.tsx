@@ -78,7 +78,7 @@ export function BatteryChart({ hourly, inputs }: Props) {
                 label={{
                   value: `floor ${(inputs.batteryDoDFloor * 100).toFixed(0)}%`,
                   position: "insideTopRight",
-                  fill: SERIES.rose,
+                  fill: theme.accent.rose,
                   fontSize: 10,
                 }}
               />

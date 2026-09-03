@@ -1,5 +1,6 @@
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import { cn } from "@/lib/utils";
+import { useFieldLabelId } from "@/components/ui/fieldLabel";
 
 interface SliderProps {
   value: number;
@@ -9,6 +10,8 @@ interface SliderProps {
   step?: number;
   className?: string;
   disabled?: boolean;
+  /** Accessible name. Only needed outside a `Field`, which supplies one. */
+  label?: string;
 }
 
 export function Slider({
@@ -19,7 +22,9 @@ export function Slider({
   step = 1,
   className,
   disabled,
+  label,
 }: SliderProps) {
+  const labelledBy = useFieldLabelId();
   return (
     <SliderPrimitive.Root
       className={cn(
@@ -43,6 +48,10 @@ export function Slider({
         <SliderPrimitive.Range className="absolute h-full bg-gradient-to-r from-[var(--color-emerald-glow)] to-[var(--color-sky-glow)]" />
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb
+        // The thumb is what carries role="slider", so the name has to live
+        // here rather than on the Root.
+        aria-label={label}
+        aria-labelledby={label ? undefined : labelledBy}
         className={cn(
           "block h-4 w-4 rounded-full",
           "bg-[var(--color-fg)] shadow-md",

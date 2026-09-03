@@ -86,7 +86,7 @@ export function HouseMode() {
                   {h.evOn ? `${h.evKWhPerDay} kWh/วัน (~${Math.round(h.evKWhPerDay * 6.5)} กม.)` : "ปิด"}
                 </p>
               </div>
-              <Switch checked={h.evOn} onChange={(v) => set("evOn", v)} />
+              <Switch label="ชาร์จ Neta V" checked={h.evOn} onChange={(v) => set("evOn", v)} />
             </div>
           </div>
         </CardContent>

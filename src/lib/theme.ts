@@ -23,10 +23,23 @@ function applyTheme(mode: ThemeMode) {
   document.documentElement.style.colorScheme = effective;
 }
 
+/**
+ * Stamp `data-theme` before React renders anything.
+ *
+ * Doing it in an effect is a render too late, and charts pay for it: the CSS
+ * variables still hold the `:root` defaults (dark) during the first pass, so
+ * `useChartTheme` samples dark axis and accent colours and paints them onto a
+ * light page. Measured on a fresh light-mode load: axis ticks at 3.58:1 and
+ * the DoD-floor caption at 2.83:1, on the first tab only, because every later
+ * tab mounts after the attribute lands. Anything already rendered keeps the
+ * wrong colours until something re-renders it.
+ */
+if (typeof document !== "undefined") applyTheme(readStored());
+
 export function useTheme() {
   const [mode, setModeState] = useState<ThemeMode>(() => readStored());
 
-  // Apply on first render
+  // Re-apply on change; the first pass already happened at module load.
   useEffect(() => {
     applyTheme(mode);
   }, [mode]);

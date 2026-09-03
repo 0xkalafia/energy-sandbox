@@ -21,12 +21,16 @@ interface Props {
 
 function InfoDot({ info }: { info: string }) {
   return (
+    // role="img" so the aria-label is allowed and announced: on a bare span
+    // ARIA forbids a name, and axe flags it as `aria-prohibited-attr` — the
+    // label is silently dropped, taking the explanation with it.
     <span
+      role="img"
       title={info}
       className="inline-flex cursor-help text-[var(--color-fg-subtle)] hover:text-[var(--color-fg-muted)]"
       aria-label={info}
     >
-      <Info className="h-3 w-3" />
+      <Info className="h-3 w-3" aria-hidden="true" />
     </span>
   );
 }

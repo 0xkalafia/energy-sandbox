@@ -196,6 +196,7 @@ export function MultiYearCashflow({ kpis, inputs }: Props) {
                 </p>
               </div>
               <Switch
+                label="Battery augmentation"
                 checked={opts.augmentationEnabled}
                 onChange={(v) => update("augmentationEnabled", v)}
               />

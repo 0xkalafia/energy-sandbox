@@ -233,7 +233,7 @@ export function ResilienceView({ inputs }: Props) {
                   label={{
                     value: `DoD floor ${(inputs.batteryDoDFloor * 100).toFixed(0)}%`,
                     position: "insideTopRight",
-                    fill: SERIES.rose,
+                    fill: theme.accent.rose,
                     fontSize: 10,
                   }}
                 />

@@ -1,17 +1,24 @@
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 import { cn } from "@/lib/utils";
+import { useFieldLabelId } from "@/components/ui/fieldLabel";
 
 interface SwitchProps {
   checked: boolean;
   onChange: (v: boolean) => void;
   className?: string;
+  /** What this toggles. Required unless the switch sits inside a `Field`,
+   *  since a bare switch reads out as "button, off" and nothing else. */
+  label?: string;
 }
 
-export function Switch({ checked, onChange, className }: SwitchProps) {
+export function Switch({ checked, onChange, className, label }: SwitchProps) {
+  const labelledBy = useFieldLabelId();
   return (
     <SwitchPrimitive.Root
       checked={checked}
       onCheckedChange={onChange}
+      aria-label={label}
+      aria-labelledby={label ? undefined : labelledBy}
       className={cn(
         "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full",
         // 20×36 is fine to click and too small to thumb. Grow the hit area

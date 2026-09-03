@@ -1,5 +1,6 @@
+import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import type { ReactNode } from "react";
+import { FieldLabelContext } from "@/components/ui/fieldLabel";
 
 interface FieldProps {
   label: string;
@@ -10,10 +11,14 @@ interface FieldProps {
 }
 
 export function Field({ label, hint, value, children, className }: FieldProps) {
+  const labelId = useId();
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex items-baseline justify-between gap-2">
-        <label className="text-xs font-medium tracking-wide text-[var(--color-fg-muted)]">
+        <label
+          id={labelId}
+          className="text-xs font-medium tracking-wide text-[var(--color-fg-muted)]"
+        >
           {label}
         </label>
         {value !== undefined && (
@@ -22,7 +27,11 @@ export function Field({ label, hint, value, children, className }: FieldProps) {
           </span>
         )}
       </div>
-      {children}
+      {/* The control inside reads this id and names itself after the label —
+          see fieldLabel.ts for why htmlFor can't do it. */}
+      <FieldLabelContext.Provider value={labelId}>
+        {children}
+      </FieldLabelContext.Provider>
       {hint && (
         <p className="text-[10px] text-[var(--color-fg-subtle)]">{hint}</p>
       )}
