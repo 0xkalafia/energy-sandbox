@@ -11,9 +11,11 @@
     "!src/**/*.test.ts",
     "!src/engine/mc.worker.ts",
     "!src/lib/useKeyboardShortcuts.ts",
+    "!src/lib/useFocusTrap.ts",
     "!src/lib/theme.ts",
     "!src/lib/chartTheme.ts"
   ],
+  "_excluded": "These four live in the DOM — keyboard listeners, focus, CSS custom properties — and are exercised by npm run keyboard and npm run a11y in a real browser rather than by vitest. Leaving them in scope would report them as untested when they aren't, and quietly drag the score around whenever one is edited.",
   "concurrency": 4,
   "timeoutMS": 20000,
   "htmlReporter": { "fileName": "reports/mutation/index.html" },
