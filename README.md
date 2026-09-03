@@ -26,6 +26,7 @@ npm run typecheck  # tsc --noEmit
 npm run build      # production build
 npm run visual     # chart layout audit (dev server must be running)
 npm run mutation   # do the tests actually catch bugs? (Stryker)
+npm run a11y       # axe-core + chart-text contrast, both themes
 ```
 
 ### `npm run visual`
@@ -66,6 +67,28 @@ layout to 830px and produced screenshots of a page nobody has.
 
 Kept out of CI on purpose: text metrics depend on installed fonts, so a Linux
 runner without the Thai font would report clipping that doesn't exist here.
+
+### `npm run a11y`
+
+axe-core injected into the real page, all ten tabs in both schemes, plus a
+contrast pass over SVG chart text — which axe doesn't look at, and which is
+where most of this app's words live.
+
+First run: 26 failures. Every slider was unnamed (a Radix composite puts
+`role="slider"` on a span, out of reach of `htmlFor`), so `Field` and
+`ModuleRow` now pass their label id down through context. Dark-mode axis
+labels sat at 3.01:1 against 4.5 required. And chasing the last two turned up
+a real bug: on a fresh light-mode load the first tab's charts were painted in
+*dark* theme colours, because `applyTheme` ran an effect too late for
+`useChartTheme` to sample the right variables.
+
+Each run reports how many chart labels it measured, because an early version
+of this script parsed colours with a regex over `rgba(...)` — the palette is
+OKLCH — matched nothing, and reported a clean sweep of a file it had never
+looked at.
+
+Not covered: keyboard traversal and focus order, the mobile drawer's missing
+focus trap, and text alternatives for the charts themselves.
 
 ## Tabs (10)
 
