@@ -26,3 +26,8 @@ dist-ssr
 # local dev-server config
 .claude/launch.json
 .visual/
+
+# mutation-testing output
+reports/
+stryker.log
+.stryker-tmp/

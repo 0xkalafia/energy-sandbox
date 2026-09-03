@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Mutation testing: change the engine on purpose and see whether the tests notice. A green suite only proves the code ran; this proves the assertions have teeth. Scoped to the pure modules — the engine and the lib helpers — because those are what the tests actually cover; components are checked in a real browser instead (npm run visual).",
+  "packageManager": "npm",
+  "testRunner": "vitest",
+  "reporters": ["html", "clear-text", "progress"],
+  "coverageAnalysis": "perTest",
+  "mutate": [
+    "src/engine/**/*.ts",
+    "src/lib/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/engine/mc.worker.ts",
+    "!src/lib/useKeyboardShortcuts.ts",
+    "!src/lib/theme.ts",
+    "!src/lib/chartTheme.ts"
+  ],
+  "concurrency": 4,
+  "timeoutMS": 20000,
+  "htmlReporter": { "fileName": "reports/mutation/index.html" },
+  "thresholds": { "high": 85, "low": 70, "break": null }
+}
