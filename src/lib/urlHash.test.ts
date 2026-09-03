@@ -8,7 +8,26 @@ import type { SimInputs } from "@/data/types";
  * through an untrusted path — pasted into chat, wrapped by a client, typed by
  * hand. What matters is that a link either restores exactly what was shared or
  * refuses cleanly; a hash that half-decodes is worse than one that fails.
+ *
+ * The base64 helpers below are spelled out rather than imported from the
+ * module under test: an expected value produced by calling the encoder would
+ * agree with it however wrong both were. They use btoa/atob deliberately —
+ * the same primitives the app runs on in a browser, and unlike Buffer they
+ * exist in the app's type environment.
  */
+
+const b64 = (s: string) =>
+  btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+
+const b64url = (s: string) =>
+  b64(s).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+
+const unb64 = (s: string) => {
+  const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+  return new TextDecoder().decode(
+    Uint8Array.from(atob(s + pad), (c) => c.charCodeAt(0)),
+  );
+};
 
 const tweak = (over: Partial<SimInputs>): SimInputs => ({
   ...DEFAULT_INPUTS,
@@ -74,10 +93,7 @@ describe("only the delta travels", () => {
   it("carries the changed key and no others", () => {
     const hash = encodeInputsToHash(tweak({ carbonPrice: 275 }));
     const json = JSON.parse(
-      Buffer.from(
-        hash.slice(2).replaceAll("-", "+").replaceAll("_", "/"),
-        "base64",
-      ).toString("utf8"),
+      unb64(hash.slice(2).replaceAll("-", "+").replaceAll("_", "/")),
     );
     expect(json).toEqual({ carbonPrice: 275 });
   });
@@ -90,7 +106,7 @@ describe("base64url — the encoding exists so chat clients don't mangle it", ()
     for (const k of Object.keys(inputs) as (keyof SimInputs)[]) {
       if (inputs[k] !== DEFAULT_INPUTS[k]) delta[k] = inputs[k];
     }
-    return Buffer.from(JSON.stringify(delta), "utf8").toString("base64");
+    return b64(JSON.stringify(delta));
   };
 
   it("never emits +, / or = across a wide sweep of values", () => {
@@ -126,12 +142,11 @@ describe("base64url — the encoding exists so chat clients don't mangle it", ()
     // validator drops the key afterwards, but the decode has to survive it.
     const withPlus = JSON.stringify({ solarMW: 4200, note: "🌞🌞" });
     const withSlash = JSON.stringify({ solarMW: 4200, note: "🔋🌞" });
-    expect(Buffer.from(withPlus, "utf8").toString("base64")).toContain("+");
-    expect(Buffer.from(withSlash, "utf8").toString("base64")).toContain("/");
+    expect(b64(withPlus)).toContain("+");
+    expect(b64(withSlash)).toContain("/");
 
     for (const payload of [withPlus, withSlash]) {
-      const urlSafe = Buffer.from(payload, "utf8").toString("base64url");
-      const out = decodeInputsFromHash("#s=" + urlSafe);
+      const out = decodeInputsFromHash("#s=" + b64url(payload));
       expect(out).not.toBeNull();
       expect(out!.solarMW).toBe(4200);
     }
@@ -162,9 +177,9 @@ describe("refuses junk instead of half-decoding it", () => {
     ["#s=", "empty payload"],
     ["#s=!!!!not-base64!!!!", "invalid base64"],
     ["#s=YWJj", "valid base64, not JSON"],
-    ["#s=" + Buffer.from("[1,2,3]").toString("base64url"), "JSON array"],
-    ["#s=" + Buffer.from("null").toString("base64url"), "JSON null"],
-    ["#s=" + Buffer.from('"a string"').toString("base64url"), "JSON string"],
+    ["#s=" + b64url("[1,2,3]"), "JSON array"],
+    ["#s=" + b64url("null"), "JSON null"],
+    ["#s=" + b64url('"a string"'), "JSON string"],
   ])("returns null for %s (%s)", (hash) => {
     expect(decodeInputsFromHash(hash)).toBeNull();
   });
@@ -172,7 +187,7 @@ describe("refuses junk instead of half-decoding it", () => {
   it("falls back to defaults for a well-formed hash with hostile values", () => {
     // parseScenarioJSON is the gate; this checks the hash path really goes
     // through it rather than trusting the payload.
-    const hostile = Buffer.from(
+    const hostile = b64url(
       JSON.stringify({
         solarMW: -5000,
         batteryRoundTrip: 0,
@@ -180,7 +195,7 @@ describe("refuses junk instead of half-decoding it", () => {
         season: "apocalypse",
         dacOn: "yes",
       }),
-    ).toString("base64url");
+    );
     const out = decodeInputsFromHash("#s=" + hostile)!;
     expect(out).not.toBeNull();
     expect(out.solarMW).toBe(0); // clamped, not negative
@@ -191,10 +206,9 @@ describe("refuses junk instead of half-decoding it", () => {
   });
 
   it("ignores keys it doesn't know", () => {
-    const payload = Buffer.from(
-      JSON.stringify({ solarMW: 4200, evilKey: "rm -rf" }),
-    ).toString("base64url");
-    const out = decodeInputsFromHash("#s=" + payload)!;
+    const out = decodeInputsFromHash(
+      "#s=" + b64url(JSON.stringify({ solarMW: 4200, evilKey: "rm -rf" })),
+    )!;
     expect(out.solarMW).toBe(4200);
     expect(out).not.toHaveProperty("evilKey");
   });
