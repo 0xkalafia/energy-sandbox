@@ -280,5 +280,5 @@ lives here instead.
 
 ## CI
 
-`.github/workflows/ci.yml` runs lint + typecheck + tests + build on every push.
-The mutation and browser checks are local-only — see above for why.
+`.github/workflows/ci.yml` runs lint + typecheck + tests + build + check:vercel
+on every push. The mutation and browser checks stay local — see above for why.

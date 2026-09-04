@@ -23,3 +23,9 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+      # Nothing else here reads vercel.json, so an error in it clears every
+      # step above and only surfaces as a failed deployment minutes later.
+      # That is how the first deploy of this project failed. Unlike the browser
+      # checks this one is deterministic and font-independent, so it belongs.
+      - name: Validate vercel.json
+        run: npm run check:vercel
