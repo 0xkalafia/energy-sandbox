@@ -75,7 +75,24 @@ export const DISTRICTS: District[] = [
 ];
 
 /** Real area in km², from the OSM boundary (see districtGeo.ts). */
-const KM2 = Object.fromEntries(DISTRICT_GEO.map((g) => [g.id, g.km2]));
+const KM2: Record<string, number> = Object.fromEntries(
+  DISTRICT_GEO.map((g) => [g.id, g.km2]),
+);
+
+/**
+ * The ids here and in the generated geometry have to agree. They're written in
+ * two different places — this file by hand, districtGeo.ts by a script keyed
+ * off OSM's English names — so a rename upstream would drift them apart. The
+ * quiet failure is the bad one: a district with no geometry draws nothing and
+ * reports 0 km², which makes its MW/km² zero and its shape simply absent from
+ * the map. Better to refuse to start.
+ */
+const missing = DISTRICTS.filter((d) => !(d.id in KM2)).map((d) => d.id);
+if (missing.length > 0) {
+  throw new Error(
+    `districts.ts: no geometry for ${missing.join(", ")} — re-run npm run build:geo`,
+  );
+}
 
 export function districtKm2(id: string): number {
   return KM2[id] ?? 0;

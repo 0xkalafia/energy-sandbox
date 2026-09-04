@@ -222,9 +222,17 @@ for (const rel of admin.elements) {
   }
   const outer = rings(rel);
   const simplified = outer.map((r) => simplify(r, TOLERANCE));
+  // Every Phetchaburi amphoe is a single polygon today, but say so out loud
+  // rather than relying on it: an island or exclave appearing upstream would
+  // otherwise understate the area and inflate the MW/km² reading, silently.
+  if (outer.length > 1) {
+    console.log(
+      `  note: ${id} has ${outer.length} outer rings — area summed, label placed on the largest`,
+    );
+  }
   districts.push({
     id,
-    km2: Math.round(areaKm2(outer[0])),
+    km2: Math.round(outer.reduce((s, r) => s + areaKm2(r), 0)),
     centroid: project(centroid(outer[0])),
     path: toPath(simplified),
     points: simplified.reduce((s, r) => s + r.length, 0),
@@ -288,8 +296,6 @@ export const RESERVOIR_PATH = ${JSON.stringify(overlay.reservoir)};
  *  clipped to the province outline. Why 42% of Phetchaburi can't host panels. */
 export const PARK_PATH = ${JSON.stringify(overlay.park)};
 
-/** Union of all eight districts, for the outline and as a clip path. */
-export const PROVINCE_PATH = ${JSON.stringify(districts.map((d) => d.path).join(""))};
 `;
 
 writeFileSync("src/data/districtGeo.ts", body);
