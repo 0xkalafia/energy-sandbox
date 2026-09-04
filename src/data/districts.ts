@@ -1,5 +1,6 @@
 import type { SimInputs } from "@/data/types";
 import { computeDemandSizes } from "@/engine/simulate";
+import { DISTRICT_GEO } from "@/data/districtGeo";
 
 /**
  * The 8 amphoe of Phetchaburi, laid out schematically (NOT to scale).
@@ -73,6 +74,13 @@ export const DISTRICTS: District[] = [
   },
 ];
 
+/** Real area in km², from the OSM boundary (see districtGeo.ts). */
+const KM2 = Object.fromEntries(DISTRICT_GEO.map((g) => [g.id, g.km2]));
+
+export function districtKm2(id: string): number {
+  return KM2[id] ?? 0;
+}
+
 export interface DistrictAlloc {
   d: District;
   solarMW: number;
@@ -83,6 +91,12 @@ export interface DistrictAlloc {
   missionGWhDay: number;
   genGWhDay: number; // rough daily generation hosted here
   capacityMW: number; // total installed generation
+  /** Real district area, so the map can show intensity as well as totals. */
+  km2: number;
+  /** Installed generation per km² — a very different picture from the total,
+   *  because Kaeng Krachan and Nong Ya Plong are 62% of the province between
+   *  them and would otherwise look busiest simply for being biggest. */
+  capacityMWPerKm2: number;
 }
 
 /** Sum a weight key across all districts (for normalisation). */
@@ -121,6 +135,7 @@ export function allocate(inputs: SimInputs): DistrictAlloc[] {
     // crude daily gen estimate at ~0.17 CF blended
     const capacityMW = solarMW + windMW + hydroMW;
     const genGWhDay = (capacityMW * 24 * 0.17) / 1000;
+    const km2 = districtKm2(district.id);
     return {
       d: district,
       solarMW,
@@ -130,6 +145,8 @@ export function allocate(inputs: SimInputs): DistrictAlloc[] {
       missionGWhDay,
       genGWhDay,
       capacityMW,
+      km2,
+      capacityMWPerKm2: km2 > 0 ? capacityMW / km2 : 0,
     };
   });
 }

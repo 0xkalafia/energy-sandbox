@@ -32,6 +32,7 @@ npm run dev:host   # …also reachable from a phone on the same Wi-Fi
 | `npm run visual` · `npm run a11y` · `npm run keyboard` | needs a dev server |
 | `npm run sw:check` | needs `npm run build` first |
 | `npm run check:vercel` | validates vercel.json against Vercel's schema |
+| `npm run build:geo` | regenerates the map geometry from OpenStreetMap |
 
 See [Verification](#verification) for what each one checks and what it found.
 
@@ -47,7 +48,7 @@ See [Verification](#verification) for what each one checks and what it found.
 | Carbon | Emissions → DAC capture waterfall |
 | Finance | **Time machine** (2026→2046 build-out) + 20-yr cashflow (degradation, EV S-curve, carbon band) + breakdown |
 | Analysis | Sensitivity tornado + **min-CAPEX resilience optimizer** (heatmap) + **financial Monte Carlo** (payback distribution) |
-| Map | Schematic of the 8 amphoe — distributed solar / wind / battery / missions |
+| Map | **Real amphoe boundaries** from OSM — choropleth by total or per km², reservoir and national park |
 | 🏠 House | Residential simulator for the real Phetchaburi home — solar/battery ROI, off-grid, EV |
 
 Plus: scenario presets · URL-hash sharing · save + import/export (JSON + 24h CSV) ·
