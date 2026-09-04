@@ -124,11 +124,22 @@ console.log("\n── a new build ships while the tab is open ──");
  * the server no longer has — and it leaves the working tree alone. The House
  * tab is chosen because nothing has visited it, so its chunk isn't in the
  * cache either and the request genuinely has nowhere to go.
+ *
+ * Only meaningful against a server reading from this `dist`. Pointed at a
+ * deployed URL the rename changes nothing on the far end, every chunk still
+ * resolves, and the check would "fail" for want of an error it never caused.
  */
+const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(URL);
 const assets = join("dist", "assets");
-const chunk = readdirSync(assets).find((f) => /^HouseMode-.*\.js$/.test(f));
+const chunk = isLocal
+  ? readdirSync(assets).find((f) => /^HouseMode-.*\.js$/.test(f))
+  : null;
 let moved = null;
-if (!chunk) {
+if (!isLocal) {
+  console.log(
+    `skip  ${URL} isn't served from this dist — a local rename can't take a chunk off it`,
+  );
+} else if (!chunk) {
   check("a lazy chunk to remove was found", false, "run npm run build first");
 } else {
   moved = join(assets, chunk + ".moved");
