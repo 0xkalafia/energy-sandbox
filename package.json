@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "mutation": "stryker run",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "check:vercel": "node scripts/check-vercel-json.mjs",
     "visual": "node scripts/visual-check.mjs",
     "a11y": "node scripts/a11y-check.mjs",
     "keyboard": "node scripts/keyboard-check.mjs",

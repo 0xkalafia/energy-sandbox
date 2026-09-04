@@ -31,6 +31,7 @@ npm run dev:host   # …also reachable from a phone on the same Wi-Fi
 | `npm run mutation` | do the tests actually catch bugs? |
 | `npm run visual` · `npm run a11y` · `npm run keyboard` | needs a dev server |
 | `npm run sw:check` | needs `npm run build` first |
+| `npm run check:vercel` | validates vercel.json against Vercel's schema |
 
 See [Verification](#verification) for what each one checks and what it found.
 
@@ -258,6 +259,24 @@ new build ships (reproduced by moving one lazy chunk out of `dist`).
 That last case is why navigations are network-first: serving a cached index
 after a deploy hands the browser a list of chunk hashes that no longer exist.
 Hashed assets stay cache-first, since their name changes when their contents do.
+
+## Deployment
+
+Vercel, from `vercel.json`: Vite preset, `npm ci` + `npm run build` → `dist`,
+no environment variables. Pushing to `main` redeploys.
+
+Cache headers are set explicitly because the two cases pull opposite ways.
+Asset filenames carry a content hash, so a cached copy can never be the wrong
+one — a year, immutable. `sw.js`, `index.html` and the manifest change every
+deploy and carry no hash; a stale index is a list of chunk hashes the server no
+longer has, and a stale worker keeps handing it out.
+
+`npm run check:vercel` validates that file against Vercel's published schema.
+Nothing else reads it — not the build, not CI — so a mistake there survives a
+completely green gate and only surfaces as a failed deployment. Which is how
+the first one failed: two `"comment"` keys inside `headers[]`, where the schema
+sets `additionalProperties: false`. JSON has no comments, so the reasoning
+lives here instead.
 
 ## CI
 

@@ -6,14 +6,12 @@
   "installCommand": "npm ci",
   "headers": [
     {
-      "comment": "Asset filenames carry a content hash, so a cached copy can never be the wrong one. Cache them for a year.",
       "source": "/assets/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     },
     {
-      "comment": "The opposite case, and the one that matters: sw.js and index.html change every deploy and keep no hash. A stale index is a list of chunk hashes the server no longer has, and a stale worker keeps serving it. Browsers already revalidate a service worker script, but say so rather than rely on it.",
       "source": "/(sw.js|index.html|manifest.webmanifest)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
