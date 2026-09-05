@@ -29,7 +29,7 @@ npm run dev:host   # …also reachable from a phone on the same Wi-Fi
 |---|---|
 | `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` | the CI gate |
 | `npm run mutation` | do the tests actually catch bugs? |
-| `npm run visual` · `npm run a11y` · `npm run keyboard` | needs a dev server |
+| `npm run visual` · `npm run a11y` · `npm run keyboard` · `npm run perf` | needs a dev server |
 | `npm run sw:check` | needs `npm run build` first |
 | `npm run check:vercel` | validates vercel.json against Vercel's schema |
 | `npm run build:geo` | regenerates the map geometry from OpenStreetMap |
@@ -199,6 +199,29 @@ payback, DoD floor), share-link round trips, and untrusted-input validation.
 
 A **boundary sweep** asserts no NaN/Infinity for every value the sliders and the
 importer allow — battery at 0, no supply, all missions off, round-trip 0.
+
+`scripts/` is covered too, which it was not until recently. Every boundary,
+area, centroid and projected coordinate the app ships comes out of
+`scripts/lib/geo.mjs`, and the only thing that had ever checked it was the
+nationwide total — a self-consistent figure that a systematic error would move
+along with everything else. The tests there use answers known from outside the
+library: rectangles whose area is a multiplication, dissolves that must equal
+the sum of their parts.
+
+### `npm run perf`
+
+Interaction latency in a browser that is actually compositing, against a 100ms
+budget. The nationwide map is the reason it exists: 77 provinces and 12,949
+vertices re-shaded on every metric switch. Measured, that costs less than one
+frame — switching metric 26ms, selecting a province 49ms.
+
+It is a script rather than a console session because **paint cannot be measured
+in a hidden tab.** A browser does not rasterise a page nobody is looking at, so
+`requestAnimationFrame` never fires and a forced reflow returns almost
+instantly. Readings taken that way looked precise and were meaningless: they
+first reported 160ms for a metric switch, then near-zero for the same thing,
+and a code change was made on the strength of them before the contradiction
+was noticed.
 
 ### `npm run mutation` — 79%
 

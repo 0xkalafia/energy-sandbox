@@ -11,6 +11,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // scripts/ had no tests at all until the geometry and spreadsheet helpers
+    // got them, and they are the foundation of every boundary, area and
+    // figure the app ships. They are .mjs because the build scripts run under
+    // plain node, not through vite.
+    include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
   },
 });

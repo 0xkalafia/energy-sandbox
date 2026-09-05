@@ -273,6 +273,14 @@ export function ThailandMap() {
                       }}
                       data-iso={p.iso}
                     >
+                      {/* Plain presentation attributes, deliberately. An
+                          earlier version painted through `style` on the theory
+                          that an attribute change invalidates more — measured
+                          in a browser that was actually compositing, the two
+                          are identical (13.9ms vs 14.0ms, against 13.8ms for
+                          touching nothing at all: re-shading all 77 costs less
+                          than one frame). The reading that suggested otherwise
+                          came from a hidden tab, which does not rasterise. */}
                       <path
                         d={p.outline}
                         fill={s == null ? "var(--color-bg-hover)" : metric.hue}

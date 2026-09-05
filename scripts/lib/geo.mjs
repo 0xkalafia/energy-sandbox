@@ -162,10 +162,23 @@ export function simplifyWays(relations, tol) {
   return out;
 }
 
-/** km² by shoelace on a local equal-ish projection. */
+/**
+ * km² by shoelace on a local equal-ish projection.
+ *
+ * The east-west scale is taken at the ring's mean latitude, which is an
+ * approximation that costs about 0.85% on a shape 15° tall and is negligible
+ * on an amphoe. The shoelace itself closes the ring with `% n`, so a repeated
+ * first-and-last vertex contributes a zero-area term and is harmless there —
+ * but it would skew the mean latitude, so it is left out of that. Measured, it
+ * moves a 5-point box by 0.042% and real amphoe by 0.000%; the correction is
+ * here because the function should be right for any caller, not because it
+ * changed anything in this project.
+ */
 export function areaKm2(ring) {
-  const lat0 =
-    ((ring.reduce((s, p) => s + p[1], 0) / ring.length) * Math.PI) / 180;
+  const n = ring.length > 1 && same(ring[0], ring.at(-1)) ? ring.length - 1 : ring.length;
+  let latSum = 0;
+  for (let i = 0; i < n; i++) latSum += ring[i][1];
+  const lat0 = ((latSum / n) * Math.PI) / 180;
   const kx = 111.32 * Math.cos(lat0);
   const ky = 110.57;
   let a = 0;

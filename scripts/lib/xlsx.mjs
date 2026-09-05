@@ -90,6 +90,12 @@ const decode = (s) =>
  * cell's own reference, so a row that skips a column lines up with its
  * header rather than shifting left — the failure that turns a spreadsheet
  * into plausible nonsense.
+ *
+ * Empty is not the same as absent. A cell that exists but holds nothing comes
+ * back as `null`; a column the row never mentions stays a hole in the sparse
+ * array and reads as `undefined`. Callers that sum a row should treat both as
+ * zero, but the distinction is kept because losing it is how a shifted column
+ * stops being detectable.
  */
 export function readSheet(buf, sheetPath = "xl/worksheets/sheet1.xml") {
   const files = unzip(buf);
@@ -113,7 +119,18 @@ export function readSheet(buf, sheetPath = "xl/worksheets/sheet1.xml") {
   for (const [, attrs, body] of sheet.toString("utf8").matchAll(/<row([^>]*)>([\s\S]*?)<\/row>/g)) {
     const rowNum = +(/\br="(\d+)"/.exec(attrs)?.[1] ?? rows.length + 1);
     const row = [];
-    for (const [, cAttrs, cBody] of body.matchAll(/<c([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+    // The attribute capture is lazy, and that is load-bearing. Greedy
+    // `[^>]*` swallows the slash of a self-closing `<c r="L3"/>`, so the
+    // `\/>` branch can no longer match and the parse falls through to
+    // `>…</c>` — which then runs past the empty cell and eats the NEXT one.
+    // The value of M3 arrives labelled L3, every later cell in the row shifts
+    // one column left, and every number is still a number.
+    //
+    // Found by diffing all six workbooks against openpyxl rather than the one
+    // that was checked when this was written: four cells across two files, in
+    // the only two rows in the whole set where Excel emitted an empty cell
+    // this way.
+    for (const [, cAttrs, cBody] of body.matchAll(/<c([^>]*?)\s*(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       const ref = /\br="([A-Z]+\d+)"/.exec(cAttrs)?.[1];
       const type = /\bt="([^"]+)"/.exec(cAttrs)?.[1];
       const col = ref ? cellRef(ref).col : row.length;
