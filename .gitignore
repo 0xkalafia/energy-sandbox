@@ -31,3 +31,6 @@ dist-ssr
 reports/
 stryker.log
 .stryker-tmp/
+
+# cached OSM responses for the boundary build
+.geocache/
