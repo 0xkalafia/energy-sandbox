@@ -125,6 +125,10 @@ const DAYS_IN = [31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const out = [];
 /** Sample points where PVGIS's tilt optimiser had to be overruled. */
 const rescued = [];
+/** Provinces that fell back to their own centroid, every amphoe having failed. */
+const skippedProvinces = [];
+/** Amphoe centroids PVGIS could not answer for at all — usually over water. */
+const deadPoints = [];
 
 /**
  * One PVGIS sample, with the optimiser checked rather than trusted.
@@ -165,12 +169,20 @@ async function pvAt(lon, lat, key, label) {
 
   // Only now is it worth knowing what the same panel does lying flat, which is
   // the floor a tilted one can never fall below.
-  const flat = await cached(`_pv-${key}`, () => getJson(base, `PVGIS flat ${key}`));
+  //
+  // This is also allowed to fail. Some amphoe centroids land on water — Ban
+  // Laem is mostly salt flats and tidal mudflat — and PVGIS answers 400 for a
+  // point outside its land database. One unusable sample point should cost
+  // that point, not the province and certainly not the run.
+  const flat = await cachedOptional(`_pv-${key}`, () =>
+    getJson(base, `PVGIS flat ${key}`, 2),
+  );
+  if (!flat) return opt ?? null;
   if (e >= yield_(flat) && e > 0) return opt;
 
   const tilt = Math.min(30, Math.max(5, Math.round(lat)));
-  const explicit = await cached(`_pvtilt-${key}`, () =>
-    getJson(`${base}&angle=${tilt}&aspect=0`, `PVGIS tilt ${key}`),
+  const explicit = await cachedOptional(`_pvtilt-${key}`, () =>
+    getJson(`${base}&angle=${tilt}&aspect=0`, `PVGIS tilt ${key}`, 2),
   );
   const pv = yield_(explicit) >= yield_(flat) ? explicit : flat;
   rescued.push(
@@ -225,10 +237,21 @@ for (const [i, p] of provinces.entries()) {
     const pv = await pvAt(a.lonLat[0], a.lonLat[1], `a${a.id}`, `${p.en}/${a.en}`);
     const cf = cfOf(pv);
     if (cf > 0) samples.push({ id: a.id, en: a.en, km2: a.km2, cf, pv });
+    else deadPoints.push(`${p.en}/${a.en}`);
   }
   if (!samples.length) {
-    console.error(`\n${p.iso} ${p.en}: no usable amphoe sample`);
-    process.exit(1);
+    // Every sampled amphoe centroid was unusable — possible for a small
+    // coastal province where the centroids sit over water. Fall back to the
+    // province's own point, which is the whole-of-province anchor and is
+    // chosen to be inside the outline.
+    const pv = await pvAt(lon, lat, p.iso, `${p.en} (province fallback)`);
+    const cf = cfOf(pv);
+    if (!cf) {
+      console.error(`\n${p.iso} ${p.en}: no usable sample anywhere`);
+      process.exit(1);
+    }
+    samples.push({ id: p.iso, en: p.en, km2: p.km2, cf, pv });
+    skippedProvinces.push(p.en);
   }
 
   const totalKm2 = samples.reduce((s, x) => s + x.km2, 0);
@@ -330,6 +353,20 @@ for (const r of out) r.coastal = coastal.has(r.iso);
 if (rescued.length) {
   console.log(`\nPVGIS tilt optimiser overruled for ${rescued.length}:`);
   for (const line of rescued) console.log(`  ${line}`);
+}
+// Sample points that were dropped, and provinces left with none. Printed
+// rather than swallowed: a province quietly reduced to one usable sample is
+// back to the failure this whole change was made to fix.
+if (deadPoints.length) {
+  console.log(`\n${deadPoints.length} sample point(s) PVGIS could not answer (centroid over water):`);
+  console.log(`  ${deadPoints.join(", ")}`);
+}
+if (skippedProvinces.length) {
+  console.log(`\n${skippedProvinces.length} province(s) fell back to their own centroid: ${skippedProvinces.join(", ")}`);
+}
+const thin = out.filter((r) => r.solarSamples < 2);
+if (thin.length) {
+  console.log(`\n${thin.length} province(s) rest on a single sample: ${thin.map((r) => r.iso).join(", ")}`);
 }
 
 // Surat Thani's 0.052 reached the generated file on an earlier run and looked

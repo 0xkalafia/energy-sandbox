@@ -69,6 +69,19 @@ const DEVICES = [
 /** Minimum comfortable tap target. Below this a finger misses. */
 const MIN_TAP = 32;
 
+/**
+ * Second views reachable by one click from a tab, keyed by tab name.
+ *
+ * `open` and `back` are matched against button text; `slug` names the
+ * screenshot. Everything a user can reach in one click from a tab has to be
+ * listed here, or this check quietly grades half the app.
+ */
+const VARIANTS = {
+  Map: [
+    { open: "ทั้งประเทศ 77 จังหวัด", back: "เพชรบุรี 8 อำเภอ", slug: "thailand" },
+  ],
+};
+
 /** Runs in the page. Everything a visitor would spot without opening devtools. */
 function auditPage([isTouch, minTap]) {
   const clipped = [];
@@ -388,6 +401,67 @@ for (const device of DEVICES) {
 
       hardFails += hard;
       if (soft) warnings.push(`${device.id}/${scheme}/${name}`);
+
+      /*
+       * Views a tab hides behind its own switch.
+       *
+       * Walking the tab strip alone measured the Map tab's province view and
+       * called the tab clean, while the nationwide map — a 1000×1825 viewBox
+       * of 77 provinces, which is exactly the shape of thing that overflows a
+       * 390px phone — was never rendered. A pass that reports on a view it did
+       * not open is worse than no pass at all.
+       */
+      for (const variant of (VARIANTS[name] ?? [])) {
+        const opened = await page.evaluate((text) => {
+          const b = [...document.querySelectorAll("button")].find((x) =>
+            x.textContent.includes(text),
+          );
+          b?.click();
+          return Boolean(b);
+        }, variant.open);
+        if (!opened) {
+          console.log(`FAIL  ${name} → ${variant.open}: switch not found`);
+          hardFails++;
+          continue;
+        }
+        await page.waitForTimeout(900);
+
+        const vr = await page.evaluate(auditPage, [!!device.touch, MIN_TAP]);
+        await screenshotWholePage(
+          page,
+          join(dir, `${slug}-${variant.slug}.png`),
+          { width: device.width, height: device.height },
+        );
+        const vHard = vr.clipped.length + vr.cutoff.length;
+        const vSoft = vr.overlaps.length + vr.smallTargets.length;
+        console.log(
+          `${vHard ? "FAIL" : vSoft ? "warn" : "ok  "}  ${name} → ${variant.open}`,
+        );
+        for (const o of vr.cutoff) {
+          console.log(
+            `        ${o.kind === "pane" ? `pane scrolls sideways ${o.past}px` : `${o.past}px past the edge`}: <${o.tag} class="${o.cls}"> ${JSON.stringify(o.text)}`,
+          );
+        }
+        for (const c of vr.clipped) {
+          console.log(`        clipped ${c.px}px off ${c.side}: "${c.text}"`);
+        }
+        for (const t of vr.smallTargets.slice(0, 6)) {
+          console.log(`        tap target ${t.min}px: "${t.label}"  class="${t.cls}"`);
+        }
+        hardFails += vHard;
+        if (vSoft) warnings.push(`${device.id}/${scheme}/${name}→${variant.slug}`);
+
+        // Back to the tab's own default. Re-clicking the tab does not do it —
+        // the strip is React-controlled and clicking the active tab is a
+        // no-op, so the switch would stay where this loop left it and the
+        // next device would measure the wrong view.
+        await page.evaluate((text) => {
+          [...document.querySelectorAll("button")]
+            .find((x) => x.textContent.includes(text))
+            ?.click();
+        }, variant.back);
+        await page.waitForTimeout(600);
+      }
     }
     await page.close();
   }

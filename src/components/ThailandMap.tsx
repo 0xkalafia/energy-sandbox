@@ -69,8 +69,13 @@ const METRICS: Metric[] = [
     value: (iso) => resOf.get(iso)?.solarCF ?? null,
     format: (v) => `CF ${v.toFixed(3)}`,
     hue: SERIES.solar,
+    // The honest caption for this layer says not to trust the ranking.
+    // Measured: the whole country spans 0.025 in CF, while a single province
+    // spans up to 0.026 across its own amphoe. Sorting 77 provinces by a
+    // number whose within-province spread matches the nationwide range is
+    // sorting noise.
     caption:
-      "กำลังผลิตต่อกำลังติดตั้ง วัดโดย PVGIS ที่มุมเอียงดีที่สุด · ทั้งประเทศต่างกันแค่ 0.151-0.176 แดดไทยเสมอกันทั้งแผ่นดิน",
+      "PVGIS วัดรายอำเภอแล้วถ่วงตามพื้นที่ · ทั้งประเทศต่างกันแค่ 0.025 แต่ในจังหวัดเดียวก็ต่างได้ถึง 0.026 — อันดับจึงแทบไม่มีความหมาย ดูช่วงในการ์ดข้างล่าง",
   },
   {
     id: "wind",
@@ -333,9 +338,18 @@ export function ThailandMap() {
                 <StatCard
                   label="แดด"
                   value={selRes ? selRes.solarCF.toFixed(3) : "—"}
-                  sub={selRes?.tiltDeg != null ? `CF · เอียง ${selRes.tiltDeg}°` : "CF"}
+                  // The range matters more than the figure. A province whose
+                  // own amphoe span as much as the country does cannot be
+                  // meaningfully ranked against its neighbours, and the card
+                  // should say so where the number is read, not only in the
+                  // caption above the map.
+                  sub={
+                    selRes
+                      ? `CF · ${selRes.solarSamples} อำเภอ: ${selRes.solarCFRange[0].toFixed(3)}-${selRes.solarCFRange[1].toFixed(3)}`
+                      : "CF"
+                  }
                   tone="amber"
-                  info="PVGIS วัดที่จุดกึ่งกลางจังหวัด มุมเอียงที่ให้ผลผลิตสูงสุด"
+                  info="PVGIS วัดรายอำเภอที่มุมเอียงดีที่สุด แล้วถ่วงน้ำหนักตามพื้นที่ · ช่วงคือค่าต่ำสุด-สูงสุดของอำเภอในจังหวัดนี้"
                 />
                 <StatCard
                   label="ลม 50 ม."
@@ -404,9 +418,13 @@ export function ThailandMap() {
                     key={r.p.iso}
                     className="flex items-center justify-between text-[11px]"
                   >
+                    {/* 11px text makes a 17px button, which is half the
+                        minimum tap target. Grown on coarse pointers only, so
+                        the desktop density is unchanged — the same treatment
+                        the segmented controls use. */}
                     <button
                       onClick={() => setSelected(r.p.iso)}
-                      className="text-left underline-offset-2 hover:underline"
+                      className="flex items-center text-left underline-offset-2 hover:underline pointer-coarse:min-h-[36px]"
                     >
                       {i === 0 ? "สูงสุด" : "ต่ำสุด"} · {r.p.th}
                     </button>

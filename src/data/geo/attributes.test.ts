@@ -138,3 +138,46 @@ describe("what the measurements say about the model's assumptions", () => {
     }
   });
 });
+
+describe("how much a single province-level number is hiding", () => {
+  it("samples several amphoe per province, not one point", () => {
+    for (const r of PROVINCE_RESOURCE) {
+      expect(r.solarSamples, r.iso).toBeGreaterThanOrEqual(1);
+      expect(r.solarCFRange[0], r.iso).toBeLessThanOrEqual(r.solarCF);
+      expect(r.solarCFRange[1], r.iso).toBeGreaterThanOrEqual(r.solarCF);
+    }
+    // Only a handful of provinces have fewer than four amphoe; if this drops,
+    // the sampling has quietly reverted to something like a single point.
+    const wellSampled = PROVINCE_RESOURCE.filter((r) => r.solarSamples >= 4);
+    expect(wellSampled.length).toBeGreaterThan(65);
+  });
+
+  it("finds a province's own spread rivals the whole country's", () => {
+    /*
+     * This is the reason the map tells readers not to rank provinces by
+     * sunshine, and it is worth pinning because it is counterintuitive
+     * enough that someone will later "fix" the caption.
+     *
+     * Nationwide the CF spans about 0.025. Surat Thani spans 0.026 across
+     * its own amphoe; Phetchaburi 0.016. Sorting 77 provinces by a number
+     * with that much internal variation is sorting noise.
+     */
+    const all = PROVINCE_RESOURCE.map((r) => r.solarCF);
+    const national = Math.max(...all) - Math.min(...all);
+    const widest = Math.max(
+      ...PROVINCE_RESOURCE.map((r) => r.solarCFRange[1] - r.solarCFRange[0]),
+    );
+    expect(widest).toBeGreaterThan(national * 0.8);
+  });
+
+  it("still separates the sunny northeast from the wet west", () => {
+    // The ranking is noisy, not meaningless: the plateau provinces really do
+    // beat the western mountains, and that survives the amphoe averaging.
+    const cf = (iso: string) => byIso.get(iso)!.solarCF;
+    for (const isaan of ["TH-45", "TH-44", "TH-46"]) {
+      for (const west of ["TH-76", "TH-71", "TH-63"]) {
+        expect(cf(isaan), `${isaan} vs ${west}`).toBeGreaterThan(cf(west));
+      }
+    }
+  });
+});
