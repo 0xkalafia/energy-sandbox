@@ -30,7 +30,10 @@ export interface ProvinceGeo {
   amphoeCount: number;
   /** [minX, minY, maxX, maxY] in viewBox units — the viewBox to zoom to. */
   bbox: [number, number, number, number];
+  /** In viewBox units — for placing a label. */
   centroid: [number, number];
+  /** [lon, lat] in degrees — for asking a service about this place. */
+  lonLat: [number, number];
   /** Province outline: the amphoe with their shared borders dissolved away. */
   outline: string;
 }

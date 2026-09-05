@@ -10,6 +10,36 @@ export const same = (a, b) =>
   Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
 
 /**
+ * Keep only relations that are actually Thai amphoe.
+ *
+ * The fetch asks Overpass for admin_level=6 relations inside a province's
+ * area, and that area is the province relation — which includes territorial
+ * waters. Across a maritime border the query therefore also picks up the
+ * neighbour's districts: Ranong came back with Kawthoung, a Myanmar district
+ * of 13,584 km², five times the whole province, which on its own accounted for
+ * 84% of the nationwide area error.
+ *
+ * Two signals, both from the data rather than from a list of names to exclude:
+ * a foreign P-code, and a name:th that says จังหวัด (province) rather than
+ * naming an amphoe. Deliberately not "name:th starts with อำเภอ" — that reads
+ * plausible and drops two real ones, Bangkok's วัฒนา and Surat Thani's Tha
+ * Chang, whose name:th is simply empty.
+ *
+ * This lives in the shared lib rather than in one script because a second copy
+ * is how the two drift apart. It already happened: the protected-area build
+ * read the same cache without this filter and measured Ranong's park coverage
+ * against a denominator that included Myanmar — 16,875 km² for a province of
+ * 3,279.
+ */
+export function isThaiAmphoe(rel) {
+  const t = rel.tags ?? {};
+  const pcode = t.dt_pcode_1 ?? t["ref:pcode"] ?? "";
+  if (pcode && !pcode.startsWith("TH")) return false;
+  if ((t["name:th"] ?? "").startsWith("จังหวัด")) return false;
+  return true;
+}
+
+/**
  * Chain a relation's member ways into closed rings.
  *
  * Multi-ring is the normal case here, not an edge case: Surat Thani's 19
