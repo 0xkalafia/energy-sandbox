@@ -310,6 +310,26 @@ That last case is why navigations are network-first: serving a cached index
 after a deploy hands the browser a list of chunk hashes that no longer exist.
 Hashed assets stay cache-first, since their name changes when their contents do.
 
+It needs the build served at `127.0.0.1:4173` before it will run, and
+`.claude/launch.json` is gitignored, so a fresh clone has to recreate it:
+
+```json
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "energy-sandbox", "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"], "port": 5173 },
+    { "name": "energy-sandbox-preview", "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "--", "--host", "127.0.0.1", "--port", "4173"],
+      "port": 4173, "url": "http://127.0.0.1:4173" }
+  ]
+}
+```
+
+Both halves of that host matter. On `localhost` the worker is never
+registered, and `vite preview` binds only `::1` without `--host` — get either
+wrong and the check runs happily against a page with no service worker on it.
+
 ## Deployment
 
 Vercel, from `vercel.json`: Vite preset, `npm ci` + `npm run build` → `dist`,
