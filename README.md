@@ -33,8 +33,40 @@ npm run dev:host   # …also reachable from a phone on the same Wi-Fi
 | `npm run sw:check` | needs `npm run build` first |
 | `npm run check:vercel` | validates vercel.json against Vercel's schema |
 | `npm run build:geo` | regenerates the map geometry from OpenStreetMap |
+| `npm run fetch:th` · `npm run build:th` | boundaries for all 77 provinces and 931 amphoe |
+| `npm run fetch:resource` | solar, wind and coastline per province |
+| `npm run fetch:parks` | national park coverage per province |
+
+All four `fetch:`/`build:` scripts cache into `.geocache/`, so a second run
+costs nothing and an interrupted one resumes.
 
 See [Verification](#verification) for what each one checks and what it found.
+
+## Nationwide data
+
+The simulator models Phetchaburi, but `src/data/geo/` now holds the whole
+country, ready for the other 76 provinces:
+
+| File | What |
+|---|---|
+| `provinces.ts` | 77 provinces: name, area, population, bbox, outline, and a lon/lat for asking services about the place |
+| `amphoe/<iso>.ts` | that province's amphoe, loaded on demand |
+| `attributes.ts` | solar CF and its monthly shape, wind at 50 m, GHI, coastal flag |
+| `protected.ts` | national park and sanctuary coverage |
+
+Two cautions that the files repeat in more detail:
+
+**Trust solar more than wind.** PVGIS and NASA POWER are independent
+retrievals and their monthly solar curves agree at r = 0.955. Wind comes
+from a ~55 km grid — a point on the Phetchaburi coast and one 30 km inland
+return identical numbers — which averages away exactly the ridges turbines
+are built on. Rank provinces by it; don't size a farm with it.
+
+**The season table and the satellites disagree about solar.** `CF_BY_SEASON`
+swings 4.4x from summer to monsoon; measured, the swing is about 1.5x, and
+in monsoon season the model generates 41% of what the satellites see. The
+annual level is sound. Nothing has been changed on the strength of this —
+it is recorded, and pinned by tests in `attributes.test.ts`.
 
 ## Tabs (10)
 
