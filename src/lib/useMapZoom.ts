@@ -37,6 +37,59 @@ interface Tracked {
   y: number;
 }
 
+/**
+ * Keep a view inside its bounds, and never wider than fully zoomed out.
+ *
+ * Height follows width so the aspect never drifts: letting both roam free
+ * lets a pinch or a clamped pan squash the country by a few percent per
+ * gesture, which compounds into a noticeably wrong shape.
+ */
+export function clampView(v: View, full: View, maxZoom: number): View {
+  const w = Math.min(full.w, Math.max(full.w / maxZoom, v.w));
+  const h = w * (full.h / full.w);
+  return {
+    w,
+    h,
+    x: Math.min(full.x + full.w - w, Math.max(full.x, v.x)),
+    y: Math.min(full.y + full.h - h, Math.max(full.y, v.y)),
+  };
+}
+
+/**
+ * Scale a view by `factor` while holding `anchor` (in view units) still.
+ *
+ * Anchoring is what makes a wheel or a pinch feel attached to the map: zoom
+ * about the centre instead and whatever was under the cursor walks off the
+ * screen.
+ */
+export function zoomAbout(
+  v: View,
+  factor: number,
+  anchor: { x: number; y: number },
+  full: View,
+  maxZoom: number,
+): View {
+  const w = v.w / factor;
+  const h = v.h / factor;
+  // A zero-width view makes the anchor arithmetic 0/0. It cannot arise from
+  // the gestures above — clampView floors the width at full/maxZoom — but this
+  // is exported, and NaN coordinates would put the map somewhere no clamp can
+  // recover from rather than failing visibly.
+  if (!(v.w > 0) || !(v.h > 0) || !Number.isFinite(w) || !Number.isFinite(h)) {
+    return clampView(full, full, maxZoom);
+  }
+  return clampView(
+    {
+      w,
+      h,
+      x: anchor.x - ((anchor.x - v.x) * w) / v.w,
+      y: anchor.y - ((anchor.y - v.y) * h) / v.h,
+    },
+    full,
+    maxZoom,
+  );
+}
+
 export function useMapZoom({ full, maxZoom = 20 }: Options) {
   const [view, setView] = useState<View>(full);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -69,18 +122,8 @@ export function useMapZoom({ full, maxZoom = 20 }: Options) {
     [],
   );
 
-  /** Keep `view` inside `full`, and never wider than fully zoomed out. */
   const clamp = useCallback(
-    (v: View): View => {
-      const w = Math.min(full.w, Math.max(full.w / maxZoom, v.w));
-      const h = w * (full.h / full.w);
-      return {
-        w,
-        h,
-        x: Math.min(full.x + full.w - w, Math.max(full.x, v.x)),
-        y: Math.min(full.y + full.h - h, Math.max(full.y, v.y)),
-      };
-    },
+    (v: View): View => clampView(v, full, maxZoom),
     [full, maxZoom],
   );
 
@@ -97,17 +140,10 @@ export function useMapZoom({ full, maxZoom = 20 }: Options) {
         const a = anchorClient
           ? toUser(anchorClient.x, anchorClient.y, v)
           : { x: v.x + v.w / 2, y: v.y + v.h / 2 };
-        const w = v.w / factor;
-        const h = v.h / factor;
-        return clamp({
-          w,
-          h,
-          x: a.x - ((a.x - v.x) * w) / v.w,
-          y: a.y - ((a.y - v.y) * h) / v.h,
-        });
+        return zoomAbout(v, factor, a, full, maxZoom);
       });
     },
-    [clamp, toUser],
+    [full, maxZoom, toUser],
   );
 
   const reset = useCallback(() => setView(full), [full]);
@@ -149,17 +185,15 @@ export function useMapZoom({ full, maxZoom = 20 }: Options) {
         if (start.dist > 0) {
           const factor = dist / start.dist;
           const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-          setView(() => {
-            const anchor = toUser(mid.x, mid.y, start.view);
-            const w = start.view.w / factor;
-            const h = start.view.h / factor;
-            return clamp({
-              w,
-              h,
-              x: anchor.x - ((anchor.x - start.view.x) * w) / start.view.w,
-              y: anchor.y - ((anchor.y - start.view.y) * h) / start.view.h,
-            });
-          });
+          setView(() =>
+            zoomAbout(
+              start.view,
+              factor,
+              toUser(mid.x, mid.y, start.view),
+              full,
+              maxZoom,
+            ),
+          );
         }
         return;
       }
@@ -170,7 +204,7 @@ export function useMapZoom({ full, maxZoom = 20 }: Options) {
         return clamp({ ...v, x: v.x - dx / scale, y: v.y - dy / scale });
       });
     },
-    [clamp, toUser],
+    [clamp, full, maxZoom, toUser],
   );
 
   const endPointer = useCallback((e: React.PointerEvent<SVGSVGElement>) => {

@@ -119,6 +119,14 @@ function ramp(value: number, min: number, max: number): number {
  */
 const NEEDS_LOG = new Set<MetricId>(["electricity", "elecDensity"]);
 
+/** The whole country, fully zoomed out. */
+const FULL_VIEW = {
+  x: 0,
+  y: 0,
+  w: GEO_VIEWBOX.width,
+  h: GEO_VIEWBOX.height,
+};
+
 export function ThailandMap() {
   const [metricId, setMetricId] = useState<MetricId>("electricity");
   const [selected, setSelected] = useState<string>(PHETCHABURI_ISO);
@@ -130,7 +138,10 @@ export function ThailandMap() {
   const moveFocus = useRef(false);
 
   const { view, zoom, svgRef, zoomBy, reset, wasDrag, handlers } = useMapZoom({
-    full: { x: 0, y: 0, w: GEO_VIEWBOX.width, h: GEO_VIEWBOX.height },
+    // Module-level, not an inline literal: a fresh object every render makes
+    // every callback inside the hook a fresh identity too, which is exactly
+    // the churn memoising them was meant to avoid.
+    full: FULL_VIEW,
     maxZoom: 20,
   });
 
@@ -171,6 +182,9 @@ export function ThailandMap() {
         p.bbox[3] > view.y,
     ).map((p) => p.iso);
   }, [detailed, view]);
+
+  /** Fast membership test for the draw loop, not just for the loader. */
+  const visibleSet = useMemo(() => new Set(visible), [visible]);
 
   useEffect(() => {
     // Only what is on screen: all 77 would be 1.2 MB, five provinces is 70 kB.
@@ -463,7 +477,14 @@ export function ThailandMap() {
                         // not in any of the numbers.
                         const base = detailed ? 2.2 : 0.8;
                         const w = (isSel ? 5 : isHome ? 3 : base) / zoom;
-                        const parts = amphoeByIso.get(p.iso);
+                        // Only for provinces actually on screen. amphoeByIso
+                        // keeps what it has fetched, and drawing all of it
+                        // meant 538 paths at 20x where two provinces are
+                        // visible — every one ever opened, still being
+                        // reconciled on each metric change.
+                        const parts = visibleSet.has(p.iso)
+                          ? amphoeByIso.get(p.iso)
+                          : undefined;
 
                         if (!detailed || !parts) {
                           return (

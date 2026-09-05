@@ -251,8 +251,17 @@ the sum of their parts.
 
 Interaction latency in a browser that is actually compositing, against a 100ms
 budget. The nationwide map is the reason it exists: 77 provinces and 12,949
-vertices re-shaded on every metric switch. Measured, that costs less than one
-frame — switching metric 26ms, selecting a province 49ms.
+vertices re-shaded on every metric switch, and 117 amphoe paths once it zooms
+in. Measured: switching metric 30ms, selecting a province 27ms, zooming a step
+26ms, switching metric while zoomed 38ms.
+
+Painting is not the cost. Rewriting the fill on every path at maximum zoom —
+538 of them, 59,000 vertices — measured 14.0ms against 13.9ms for touching
+nothing at all, which is to say one frame either way. The time goes on React
+reconciling that many elements, which is why the fix that mattered was drawing
+fewer of them: the map used to render amphoe for every province it had ever
+loaded, including the seventy-odd off screen. Restricting it to what is in
+view cut 538 paths to 117 and the two zoomed interactions by about two-thirds.
 
 It is a script rather than a console session because **paint cannot be measured
 in a hidden tab.** A browser does not rasterise a page nobody is looking at, so

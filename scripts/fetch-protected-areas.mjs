@@ -20,6 +20,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { rings, isThaiAmphoe } from "./lib/geo.mjs";
+import { makeGrid, paint, measure, windowOf, clear } from "./lib/raster.mjs";
 
 const CACHE = ".geocache";
 const OUT = "src/data/geo/protected.ts";
@@ -32,10 +33,7 @@ const UA = "energy-sandbox protected-area build (github.com/0xkalafia/energy-san
  * costs memory on a 16 GB machine for accuracy the source data doesn't have.
  */
 const CELL = 0.005;
-const LON0 = 97.0;
-const LAT0 = 5.5;
-const NX = Math.ceil((105.8 - LON0) / CELL);
-const NY = Math.ceil((20.6 - LAT0) / CELL);
+const GRID = makeGrid({ lon0: 97.0, lat0: 5.5, lon1: 105.8, lat1: 20.6, cell: CELL });
 
 mkdirSync(CACHE, { recursive: true });
 
@@ -81,70 +79,9 @@ out geom;`,
 }
 console.log(`  ${data.elements?.length ?? 0} relations`);
 
-/**
- * Scan-convert one shape into a grid, ORing it into whatever is already there.
- *
- * Every ring of the shape — outer and inner together — contributes its
- * crossings to the same raster row, and the row is filled on the even-odd
- * rule. Holes then come for free: a cell inside both a park and the enclave
- * carved out of it has an even crossing count and stays clear. A park with an
- * enclave is a real shape here, not a curiosity.
- *
- * Taking all rings in one call is also what makes ORing safe. Painting ring by
- * ring would need XOR to cut the holes, and XOR lets two overlapping shapes
- * cancel each other into empty space — two parks that share a border would
- * erase their overlap. Resolving even-odd inside the call and OR-ing the
- * result out means shapes can only ever add.
- *
- * No scratch buffer, deliberately: one per relation is 5.3 MB, and there are
- * 931 amphoe.
- */
-function paint(grid, ringList) {
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const ring of ringList) {
-    for (const [, lat] of ring) {
-      if (lat < minY) minY = lat;
-      if (lat > maxY) maxY = lat;
-    }
-  }
-  if (minY === Infinity) return;
-  const r0 = Math.max(0, Math.floor((minY - LAT0) / CELL));
-  const r1 = Math.min(NY - 1, Math.ceil((maxY - LAT0) / CELL));
-  const xs = [];
-  for (let r = r0; r <= r1; r++) {
-    const y = LAT0 + (r + 0.5) * CELL;
-    xs.length = 0;
-    for (const ring of ringList) {
-      for (let i = 0, n = ring.length; i < n; i++) {
-        const [x1, y1] = ring[i];
-        const [x2, y2] = ring[(i + 1) % n];
-        if (y1 === y2) continue;
-        // Half-open in y so a vertex exactly on the scanline is counted once,
-        // not twice — the classic double-count that leaks fill sideways.
-        if (y >= Math.min(y1, y2) && y < Math.max(y1, y2)) {
-          xs.push(x1 + ((y - y1) / (y2 - y1)) * (x2 - x1));
-        }
-      }
-    }
-    if (xs.length < 2) continue;
-    xs.sort((a, b) => a - b);
-    for (let k = 0; k + 1 < xs.length; k += 2) {
-      const c0 = Math.max(0, Math.ceil((xs[k] - LON0) / CELL - 0.5));
-      const c1 = Math.min(NX - 1, Math.floor((xs[k + 1] - LON0) / CELL - 0.5));
-      const base = r * NX;
-      for (let c = c0; c <= c1; c++) grid[base + c] = 1;
-    }
-  }
-}
-
-/** km² of one cell at a given row — cells shrink as you go north. */
-const cellKm2 = (r) =>
-  CELL * 111.32 * Math.cos(((LAT0 + (r + 0.5) * CELL) * Math.PI) / 180) * CELL * 110.57;
-
 // ---------- paint the parks ----------
 console.log("painting protected areas…");
-const park = new Uint8Array(NX * NY);
+const park = GRID.alloc();
 let painted = 0;
 /** Rings of a protected area, whether OSM stored it as a way or a relation. */
 function shapeRings(el) {
@@ -158,14 +95,10 @@ function shapeRings(el) {
 for (const el of data.elements ?? []) {
   const rs = shapeRings(el);
   if (!rs.length) continue;
-  paint(park, rs);
+  paint(GRID, park, rs);
   painted++;
 }
-let parkKm2 = 0;
-for (let r = 0; r < NY; r++) {
-  const a = cellKm2(r);
-  for (let c = 0; c < NX; c++) if (park[r * NX + c]) parkKm2 += a;
-}
+const parkKm2 = measure(GRID, park, null).land;
 console.log(`  ${painted} areas · ${Math.round(parkKm2).toLocaleString()} km² protected`);
 console.log(`  Thailand's official protected estate is about 110,000 km² (21%)`);
 
@@ -175,57 +108,6 @@ const provinces = JSON.parse(
     /PROVINCES: ProvinceGeo\[\] = ([\s\S]*?);\n/,
   )[1],
 );
-
-/**
- * Grid window covering a set of rings, clamped to the raster.
- *
- * Everything below is measured and cleared through one of these. Sweeping the
- * whole 1760 × 3020 grid once per amphoe would be 4.9 billion cell visits
- * across the 931 of them; an amphoe's own window is a few thousand.
- */
-function windowOf(ringList) {
-  let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
-  for (const ring of ringList) {
-    for (const [lon, lat] of ring) {
-      if (lon < minLon) minLon = lon;
-      if (lon > maxLon) maxLon = lon;
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-    }
-  }
-  if (minLon === Infinity) return null;
-  return {
-    r0: Math.max(0, Math.floor((minLat - LAT0) / CELL) - 1),
-    r1: Math.min(NY - 1, Math.ceil((maxLat - LAT0) / CELL) + 1),
-    c0: Math.max(0, Math.floor((minLon - LON0) / CELL) - 1),
-    c1: Math.min(NX - 1, Math.ceil((maxLon - LON0) / CELL) + 1),
-  };
-}
-
-/** Count land and protected land under whatever is painted into `grid`. */
-function measure(grid, win) {
-  const { r0, r1, c0, c1 } = win ?? { r0: 0, r1: NY - 1, c0: 0, c1: NX - 1 };
-  let land = 0;
-  let prot = 0;
-  for (let r = r0; r <= r1; r++) {
-    const a = cellKm2(r);
-    const base = r * NX;
-    for (let c = c0; c <= c1; c++) {
-      const k = base + c;
-      if (!grid[k]) continue;
-      land += a;
-      if (park[k]) prot += a;
-    }
-  }
-  return { land, prot };
-}
-
-/** Zero just the window, so one scratch buffer serves every amphoe. */
-function clear(grid, win) {
-  for (let r = win.r0; r <= win.r1; r++) {
-    grid.fill(0, r * NX + win.c0, r * NX + win.c1 + 1);
-  }
-}
 
 const out = [];
 /**
@@ -240,7 +122,7 @@ const out = [];
 const amphoeOut = [];
 // One scratch grid reused for every amphoe. Allocating per amphoe would be
 // 5.3 MB × 931 of churn on a machine that does not have it to spare.
-const scratch = new Uint8Array(NX * NY);
+const scratch = GRID.alloc();
 
 for (const [i, p] of provinces.entries()) {
   const raw = JSON.parse(readFileSync(join(CACHE, `${p.iso}.json`), "utf8"));
@@ -249,19 +131,19 @@ for (const [i, p] of provinces.entries()) {
   // filter the boundary build uses has to be applied here too — without it
   // Ranong's denominator included Kawthoung and its protected share was
   // measured against 16,875 km² instead of 3,279.
-  const prov = new Uint8Array(NX * NY);
+  const prov = GRID.alloc();
   const units = (raw.elements ?? []).filter(isThaiAmphoe);
   for (const rel of units) {
-    paint(prov, [...rings(rel), ...rings(rel, { inner: true })]);
+    paint(GRID, prov, [...rings(rel), ...rings(rel, { inner: true })]);
   }
 
   for (const rel of units) {
     const rs = [...rings(rel), ...rings(rel, { inner: true })];
-    const win = windowOf(rs);
+    const win = windowOf(GRID, rs);
     if (!win) continue;
-    paint(scratch, rs);
-    const m = measure(scratch, win);
-    clear(scratch, win);
+    paint(GRID, scratch, rs);
+    const m = measure(GRID, scratch, park, win);
+    clear(scratch, GRID, win);
     if (m.land <= 0) continue;
     amphoeOut.push({
       id: String(rel.id),
@@ -275,13 +157,18 @@ for (const [i, p] of provinces.entries()) {
         / (District|Subdistrict)$/,
         "",
       ),
-      protectedFrac: +(m.prot / m.land).toFixed(3),
-      protectedKm2: +m.prot.toFixed(0),
+      protectedFrac: +(m.both / m.land).toFixed(3),
+      protectedKm2: +m.both.toFixed(0),
       rasterKm2: +m.land.toFixed(0),
     });
   }
 
-  const { land, prot } = measure(prov, windowOf(units.flatMap((r) => rings(r))));
+  const { land, both: prot } = measure(
+    GRID,
+    prov,
+    park,
+    windowOf(GRID, units.flatMap((r) => rings(r))),
+  );
   out.push({
     iso: p.iso,
     protectedKm2: +prot.toFixed(0),
