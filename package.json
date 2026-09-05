@@ -19,6 +19,7 @@
     "build:th": "node --max-old-space-size=6144 scripts/build-thailand-geo.mjs",
     "fetch:resource": "node scripts/fetch-province-attributes.mjs",
     "fetch:parks": "node --max-old-space-size=6144 scripts/fetch-protected-areas.mjs",
+    "fetch:elec": "node scripts/fetch-province-electricity.mjs",
     "visual": "node scripts/visual-check.mjs",
     "a11y": "node scripts/a11y-check.mjs",
     "keyboard": "node scripts/keyboard-check.mjs",
