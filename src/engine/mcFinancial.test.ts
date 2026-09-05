@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { runFinancialMC, DEFAULT_FIN_MC } from "./financialMC";
 import { runMonteCarlo, DEFAULT_MC } from "./monteCarlo";
 import { DEFAULT_INPUTS } from "@/data/constants";
+import type { Season } from "@/data/types";
 
 /**
  * Both Monte Carlos answer a question of the form "how likely is this?", and a
@@ -196,37 +197,62 @@ describe("weather Monte Carlo", () => {
   });
 
   it("respects season weights — all-monsoon draws differ from all-summer", () => {
-    const only = (s: "summer" | "monsoon") => ({
+    // All four, not the two this originally handled: called with "rainy" the
+    // old version silently produced all-zero weights, which is not "rainy
+    // only", it is whatever weightedPick does with nothing to pick from.
+    const only = (season: Season) => ({
       ...mcSmall,
-      weights: {
-        summer: s === "summer" ? 1 : 0,
-        rainy: 0,
-        winter: 0,
-        monsoon: s === "monsoon" ? 1 : 0,
-      },
+      weights: { summer: 0, rainy: 0, winter: 0, monsoon: 0, [season]: 1 },
     });
-    const summer = runMonteCarlo(DEFAULT_INPUTS, only("summer"));
-    const monsoon = runMonteCarlo(DEFAULT_INPUTS, only("monsoon"));
-    // Monsoon is still the worse solar season, so it imports more and runs the
-    // battery lower. If the weights were ignored the two would be identical.
-    //
-    // This used to assert that summer imported exactly nothing, and that
-    // stopped being true when CF_BY_SEASON's solar figures were replaced with
-    // PVGIS measurements: summer went from 0.22 to 0.165, which leaves the
-    // deterministic day at 44.3 GWh supply against 43.0 demand — a 3% margin
-    // that ordinary bad weather erases. The zero was never the point of this
-    // test, it was an artefact of a summer figure a third too high, and
-    // asserting it again would only pin the model back to the wrong number.
-    expect(monsoon.percentiles.importGWh.p50).toBeGreaterThan(
-      summer.percentiles.importGWh.p50,
+    /*
+     * All four seasons, not two, and that is not thoroughness for its own
+     * sake — it is what the corrected data forced.
+     *
+     * This test used to compare summer against monsoon on imports and on
+     * lowest state of charge. Both halves broke when CF_BY_SEASON's solar
+     * figures were replaced with PVGIS measurements: summer fell from 0.22 to
+     * 0.165, so it no longer imports exactly nothing, and both seasons now
+     * drive the battery to its 10% floor, so the SoC comparison became
+     * 0.1 < 0.1. Weakening it to "monsoon imports more" left the season
+     * weighting barely covered — mutation score for monteCarlo.ts fell from
+     * 72% to 61%, which is how the loss showed up at all.
+     *
+     * Running each season on its own recovers it, and says more. The four are
+     * clearly distinguishable, just not on the axis this test first used:
+     * winter and rainy keep real battery headroom while summer and monsoon
+     * both sit on the floor, and monsoon imports an order of magnitude more
+     * than anything else.
+     */
+    const byseason = Object.fromEntries(
+      (["summer", "rainy", "winter", "monsoon"] as const).map((s) => [
+        s,
+        runMonteCarlo(DEFAULT_INPUTS, only(s)),
+      ]),
     );
-    // Lowest SoC used to separate the two as well, and no longer can: with the
-    // corrected solar figures both seasons drive the battery down to the 10%
-    // depth-of-discharge floor, so the metric is clamped and comparing it
-    // would assert 0.1 < 0.1. That both now bottom out is itself the finding —
-    // under the old summer figure the battery had room to spare.
-    expect(summer.percentiles.lowestSoC.p50).toBeCloseTo(0.1, 2);
-    expect(monsoon.percentiles.lowestSoC.p50).toBeCloseTo(0.1, 2);
+    // Monsoon is far and away the worst: measured, 28.9 GWh against 1.4 for
+    // summer and nothing at all for the two mild seasons.
+    const monsoonImp = byseason.monsoon.percentiles.importGWh.p50;
+    for (const s of ["summer", "rainy", "winter"] as const) {
+      expect(monsoonImp, `monsoon vs ${s}`).toBeGreaterThan(
+        byseason[s].percentiles.importGWh.p50 * 5 + 1,
+      );
+    }
+    // Summer still costs more than rainy, even though rainy has the worse sun
+    // of the two — demand is 20% higher in summer and the dam is nearly empty.
+    // Solar alone does not order these seasons, which is why asserting on it
+    // would be the wrong test.
+    expect(byseason.summer.percentiles.importGWh.p50).toBeGreaterThan(
+      byseason.rainy.percentiles.importGWh.p50,
+    );
+
+    // Battery headroom orders the seasons where imports cannot: winter keeps
+    // the most, rainy next, and the two hard seasons bottom out.
+    const soc = (s: keyof typeof byseason) =>
+      byseason[s].percentiles.lowestSoC.p50;
+    expect(soc("winter")).toBeGreaterThan(soc("rainy"));
+    expect(soc("rainy")).toBeGreaterThan(soc("summer"));
+    expect(soc("summer")).toBeCloseTo(0.1, 2);
+    expect(soc("monsoon")).toBeCloseTo(0.1, 2);
   });
 
   it("normalises weights, so doubling them all changes nothing", () => {

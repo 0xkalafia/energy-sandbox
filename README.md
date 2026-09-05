@@ -60,18 +60,30 @@ Two cautions that the files repeat in more detail:
 retrievals and their monthly solar curves agree at r = 0.955. Wind comes
 from a ~55 km grid — a point on the Phetchaburi coast and one 30 km inland
 return identical numbers — which averages away exactly the ridges turbines
-are built on. Rank provinces by it; don't size a farm with it.
+are built on. Use it to rank provinces; don't size a farm with it.
 
-**The season table and the satellites disagree about solar.** `CF_BY_SEASON`
-swings 4.4x from its best season to its worst; measured for Phetchaburi the
-swing is 1.6x. Almost all of the gap is one season: the table puts monsoon
-solar at 0.05 where PVGIS measures 0.128, so the model generates 39% of what
-the satellites see in exactly the months it uses to stress the system. The
-annual level is sound — 0.151 measured against ~0.163 implied.
+**Don't rank provinces by sunshine either.** Solar is sampled at up to six
+amphoe per province and area-weighted, and the reason is in the spread:
+nationwide the capacity factor covers 0.025, while Surat Thani alone covers
+0.026 across its own amphoe. A national ordering of a number with that much
+internal variation is mostly noise, and the map says so where the figure is
+read. The regional signal survives — the northeastern plateau really does
+beat the western mountains — but neighbouring provinces do not.
 
-Nothing has been changed on the strength of this. It is recorded, and pinned
-from both sides by tests in `attributes.test.ts`, so neither the data nor the
-table can drift without the disagreement being re-examined.
+**The season table's solar was wrong in shape, and has been replaced.**
+`CF_BY_SEASON` used to swing 4.4x from best season to worst against a
+measured 1.6x, almost all of it in one season: monsoon at 0.05 where PVGIS
+measures 0.128. The model generated 39% of the real September and October
+output and sized storage for a drought that does not happen. Those figures
+are now derived from the measurement rather than typed in.
+
+What that changed, on `DEFAULT_INPUTS`: monsoon imports fell from 12.75 to
+0.32 GWh/day, summer's 6.4 GWh/day export surplus turned out not to exist,
+and the best solar season is winter, not summer. Headline annual value is
+unchanged — it comes from mission output sized by targets, not from capacity
+factors.
+
+Wind, biomass and hydro were left alone, for the reason above.
 
 ## Tabs (10)
 
