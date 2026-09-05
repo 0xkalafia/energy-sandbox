@@ -63,10 +63,15 @@ return identical numbers — which averages away exactly the ridges turbines
 are built on. Rank provinces by it; don't size a farm with it.
 
 **The season table and the satellites disagree about solar.** `CF_BY_SEASON`
-swings 4.4x from summer to monsoon; measured, the swing is about 1.5x, and
-in monsoon season the model generates 41% of what the satellites see. The
-annual level is sound. Nothing has been changed on the strength of this —
-it is recorded, and pinned by tests in `attributes.test.ts`.
+swings 4.4x from its best season to its worst; measured for Phetchaburi the
+swing is 1.6x. Almost all of the gap is one season: the table puts monsoon
+solar at 0.05 where PVGIS measures 0.128, so the model generates 39% of what
+the satellites see in exactly the months it uses to stress the system. The
+annual level is sound — 0.151 measured against ~0.163 implied.
+
+Nothing has been changed on the strength of this. It is recorded, and pinned
+from both sides by tests in `attributes.test.ts`, so neither the data nor the
+table can drift without the disagreement being re-examined.
 
 ## Tabs (10)
 

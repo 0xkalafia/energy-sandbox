@@ -297,10 +297,11 @@ export interface ProvinceResource {
   /**
    * Twelve monthly capacity factors, January first.
    *
-   * The seasonal swing here is far gentler than the model assumes: measured
-   * best-to-worst month is about 1.5x, where CF_BY_SEASON implies 4.4x. The
-   * model is sizing storage for a solar drought that the satellites do not
-   * see.
+   * The seasonal swing here is far gentler than the model assumes. Averaged
+   * into the app's four seasons, Phetchaburi runs 1.6x from best to worst
+   * where CF_BY_SEASON implies 4.4x, and nearly all of the gap is one season:
+   * the table puts monsoon solar at 0.05 against 0.128 measured. The model is
+   * sizing storage for a solar drought the satellites do not see.
    */
   solarByMonth: number[] | null;
   /** Tilt PVGIS chose, degrees — rises with latitude. */

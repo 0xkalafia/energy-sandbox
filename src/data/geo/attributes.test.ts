@@ -110,11 +110,11 @@ describe("what the measurements say about the model's assumptions", () => {
         Object.entries(CF_BY_SEASON).map(([k, v]) => [k, v.solar]),
       ),
     );
-    // The model swings 4.4x from summer to monsoon. Two independent
-    // satellite products put the real swing near 1.5x, agreeing with each
-    // other at r = 0.955. Asserting both sides keeps this test honest: it
-    // fails if the data starts claiming a swing it shouldn't, and it fails
-    // if someone edits CF_BY_SEASON without revisiting this.
+    // The model swings 4.4x from its best season to its worst. Measured,
+    // Phetchaburi runs 1.6x, and two independent satellite products agree on
+    // the monthly shape at r = 0.955. Asserting both sides keeps this test
+    // honest: it fails if the data starts claiming a swing it shouldn't, and
+    // it fails if someone edits CF_BY_SEASON without revisiting this.
     expect(swing(real)).toBeLessThan(2);
     expect(modelSwing).toBeGreaterThan(3);
   });
