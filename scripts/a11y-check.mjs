@@ -248,7 +248,12 @@ for (const scheme of ["light", "dark"]) {
    * checked as its own row.
    */
   const VARIANTS = {
-    Map: ["ทั้งประเทศ 77 จังหวัด"],
+    Map: [
+      { steps: ["ทั้งประเทศ 77 จังหวัด"], slug: "ทั้งประเทศ" },
+      // Two clicks deep. The amphoe view has its own 8-50 buttons, its own
+      // roving tabindex and its own labels, and none of it was being audited.
+      { steps: ["ทั้งประเทศ 77 จังหวัด", "ดูรายอำเภอ"], slug: "รายอำเภอ" },
+    ],
   };
   /**
    * How to get a tab back to the view it opens on.
@@ -261,7 +266,7 @@ for (const scheme of ["light", "dark"]) {
    * of them was lying about which.
    */
   const DEFAULT_VIEW = {
-    Map: "เพชรบุรี 8 อำเภอ",
+    Map: ["← ย้อนกลับ", "เพชรบุรี 8 อำเภอ"],
   };
 
   for (let i = 0; i < tabs.length; i++) {
@@ -279,37 +284,35 @@ for (const scheme of ["light", "dark"]) {
     // one document, so once per page is enough.
     if (i === 0) await page.addScriptTag({ path: AXE_PATH });
 
-    for (const label of VARIANTS[tabs[i]] ?? []) {
-      const clicked = await page.evaluate((text) => {
+    const clickByText = (text) =>
+      page.evaluate((t) => {
         const b = [...document.querySelectorAll("button")].find((x) =>
-          x.textContent.includes(text),
+          x.textContent.includes(t),
         );
         b?.click();
         return Boolean(b);
-      }, label);
-      if (!clicked) {
-        console.log(`FAIL  ${tabs[i]} → ${label}: switch not found`);
-        failures++;
-        continue;
+      }, text);
+
+    for (const variant of VARIANTS[tabs[i]] ?? []) {
+      let ok = true;
+      for (const step of variant.steps) {
+        if (!(await clickByText(step))) {
+          console.log(`FAIL  ${tabs[i]} → ${variant.slug}: "${step}" not found`);
+          failures++;
+          ok = false;
+          break;
+        }
+        await page.waitForTimeout(1000);
       }
-      await page.waitForTimeout(700);
-      await auditOne(page, `${tabs[i]} → ${label}`);
-    }
-    const back = DEFAULT_VIEW[tabs[i]];
-    if (back) {
-      const ok = await page.evaluate((text) => {
-        const b = [...document.querySelectorAll("button")].find((x) =>
-          x.textContent.includes(text),
-        );
-        b?.click();
-        return Boolean(b);
-      }, back);
-      if (!ok) {
-        console.log(`FAIL  ${tabs[i]}: could not return to "${back}"`);
-        failures++;
+      if (!ok) continue;
+      failures += await auditOne(page, `${tabs[i]} → ${variant.slug}`);
+      for (const step of DEFAULT_VIEW[tabs[i]] ?? []) {
+        await clickByText(step);
+        await page.waitForTimeout(600);
       }
-      await page.waitForTimeout(700);
     }
+    // Each variant already returns to the tab's default above; nothing more
+    // to undo here.
 
     failures += await auditOne(page, tabs[i]);
   }

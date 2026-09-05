@@ -1,7 +1,7 @@
 import type { SimInputs } from "@/data/types";
 import { computeDemandSizes } from "@/engine/simulate";
 import { DISTRICT_GEO } from "@/data/districtGeo";
-import { AMPHOE_PROTECTED } from "@/data/geo/protected";
+import { PHETCHABURI_AMPHOE_PROTECTED } from "@/data/geo/protected";
 
 /**
  * The 8 amphoe of Phetchaburi, laid out schematically (NOT to scale).
@@ -115,10 +115,7 @@ export function districtKm2(id: string): number {
  */
 const PROTECTED_FRAC: Record<string, number> = (() => {
   const byEn = new Map(
-    AMPHOE_PROTECTED.filter((a) => a.iso === "TH-76").map((a) => [
-      a.en,
-      a.protectedFrac,
-    ]),
+    PHETCHABURI_AMPHOE_PROTECTED.map((a) => [a.en, a.protectedFrac]),
   );
   const alias: Record<string, string> = { Mueang: "Mueang Phetchaburi" };
   const out: Record<string, number> = {};

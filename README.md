@@ -42,6 +42,25 @@ costs nothing and an interrupted one resumes.
 
 See [Verification](#verification) for what each one checks and what it found.
 
+## Three zoom levels
+
+The Map tab switches between the Phetchaburi allocation and a nationwide view,
+and the nationwide view drills one level further:
+
+| Level | What it shows | Where the data runs out |
+|---|---|---|
+| 77 provinces | consumption, consumption per km², solar, wind, protected share | — |
+| one province | its amphoe, shaded by protected share or area | electricity is not collected below the province; solar was sampled at only six amphoe each |
+| 8 amphoe (Phetchaburi) | the scenario's own allocation, which moves with the sliders | — |
+
+All three share one projection, so zooming is a change of viewBox over the
+same coordinates rather than a second coordinate system. Amphoe geometry is
+split into 77 lazy chunks — one province is 13-45 kB — and the 931-row
+protected-area table loads with it rather than with the tab.
+
+The amphoe view says what it does not have instead of dividing a province
+figure by area and presenting the quotient as a measurement.
+
 ## Nationwide data
 
 The simulator models Phetchaburi, but `src/data/geo/` now holds the whole

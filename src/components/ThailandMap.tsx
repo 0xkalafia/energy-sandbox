@@ -9,6 +9,7 @@ import { PROVINCE_ELECTRICITY } from "@/data/geo/electricity";
 import { PROVINCE_RESOURCE } from "@/data/geo/attributes";
 import { PROVINCE_PROTECTED } from "@/data/geo/protected";
 import { PHETCHABURI_ISO } from "@/data/constants";
+import { AmphoeMap } from "@/components/AmphoeMap";
 
 /**
  * The whole country, on the same measurements the Phetchaburi model runs on.
@@ -118,6 +119,8 @@ const NEEDS_LOG = new Set<MetricId>(["electricity", "elecDensity"]);
 export function ThailandMap() {
   const [metricId, setMetricId] = useState<MetricId>("electricity");
   const [selected, setSelected] = useState<string>(PHETCHABURI_ISO);
+  /** Non-null when the map has zoomed into one province's amphoe. */
+  const [zoomed, setZoomed] = useState<string | null>(null);
   const metric = METRICS.find((m) => m.id === metricId)!;
 
   const svgRef = useRef<SVGSVGElement>(null);
@@ -162,6 +165,25 @@ export function ThailandMap() {
   const selRank = ranked.findIndex((r) => r.p.iso === sel.iso);
 
   const extremes = [ranked[0], ranked[ranked.length - 1]].filter(Boolean);
+
+  const zoomedProvince = zoomed ? geoOf.get(zoomed) : null;
+  if (zoomedProvince) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="pt-5">
+            {/* Keyed on the province so switching one for another remounts
+                rather than reusing state that belongs to the old one. */}
+            <AmphoeMap
+              key={zoomedProvince.iso}
+              province={zoomedProvince}
+              onBack={() => setZoomed(null)}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -322,6 +344,17 @@ export function ThailandMap() {
                   </span>
                 )}
               </div>
+
+              {/* Into the third level. The button lives here rather than on the
+                  map itself because a click on a province already means
+                  "select", and overloading it with "enter" would make one of
+                  the two unreachable by keyboard. */}
+              <button
+                onClick={() => setZoomed(sel.iso)}
+                className="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-left text-[11px] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] pointer-coarse:min-h-[36px]"
+              >
+                ดูรายอำเภอ — {sel.th} มี {sel.amphoeCount} อำเภอ →
+              </button>
 
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <StatCard

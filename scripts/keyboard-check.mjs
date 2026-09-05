@@ -209,6 +209,53 @@ const browser = await chromium.launch({ executablePath: CHROME });
       moved.to !== moved.from && moved.to === moved.pressed,
       `${moved.from} → focus ${moved.to}, selected ${moved.pressed}`,
     );
+
+    // One level deeper: the amphoe view has its own map, its own buttons and
+    // its own roving tabindex, all written separately from the one above.
+    const drilled = await page.evaluate(() => {
+      const b = [...document.querySelectorAll("button")].find((x) =>
+        x.textContent.includes("ดูรายอำเภอ"),
+      );
+      b?.click();
+      return Boolean(b);
+    });
+    await page.waitForTimeout(1600);
+    const amphoe = await page.evaluate(async () => {
+      const gs = [...document.querySelectorAll("svg [data-amphoe]")];
+      const first = gs[0];
+      first?.focus();
+      const from = document.activeElement?.getAttribute("data-amphoe");
+      first?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      );
+      await new Promise((r) => setTimeout(r, 250));
+      return {
+        count: gs.length,
+        stops: gs.filter((g) => g.getAttribute("tabindex") === "0").length,
+        named: gs.filter((g) => (g.getAttribute("aria-label") ?? "").trim()).length,
+        from,
+        to: document.activeElement?.getAttribute("data-amphoe"),
+        back: [...document.querySelectorAll("button")].some((b) =>
+          b.textContent.trim().startsWith("←"),
+        ),
+      };
+    });
+    check(
+      "the amphoe map is reachable and is one stop too",
+      drilled && amphoe.count > 0 && amphoe.stops === 1,
+      `${amphoe.count} amphoe, ${amphoe.stops} tab stop(s)`,
+    );
+    check(
+      "every amphoe announces itself",
+      amphoe.count > 0 && amphoe.named === amphoe.count,
+      `${amphoe.named}/${amphoe.count} named`,
+    );
+    check(
+      "arrows work at this level as well",
+      amphoe.to !== amphoe.from,
+      `${amphoe.from} → ${amphoe.to}`,
+    );
+    check("there is a way back out", amphoe.back, "");
   }
 
   const handles = await page.$$('[role="tab"]');

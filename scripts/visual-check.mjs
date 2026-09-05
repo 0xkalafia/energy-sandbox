@@ -78,7 +78,17 @@ const MIN_TAP = 32;
  */
 const VARIANTS = {
   Map: [
-    { open: "ทั้งประเทศ 77 จังหวัด", back: "เพชรบุรี 8 อำเภอ", slug: "thailand" },
+    { open: ["ทั้งประเทศ 77 จังหวัด"], back: ["เพชรบุรี 8 อำเภอ"], slug: "thailand" },
+    {
+      // Two clicks deep: the nationwide map, then into one province's amphoe.
+      // Worth reaching because it is the only view whose label sizing depends
+      // on the rendered box rather than the viewBox, and it is where 32 Thai
+      // names first turned into a smear.
+      open: ["ทั้งประเทศ 77 จังหวัด", "ดูรายอำเภอ"],
+      back: ["← ย้อนกลับ", "เพชรบุรี 8 อำเภอ"],
+      slug: "amphoe",
+      settle: 1600,
+    },
   ],
 };
 
@@ -411,20 +421,27 @@ for (const device of DEVICES) {
        * 390px phone — was never rendered. A pass that reports on a view it did
        * not open is worse than no pass at all.
        */
-      for (const variant of (VARIANTS[name] ?? [])) {
-        const opened = await page.evaluate((text) => {
+      const clickByText = (text) =>
+        page.evaluate((t) => {
           const b = [...document.querySelectorAll("button")].find((x) =>
-            x.textContent.includes(text),
+            x.textContent.includes(t),
           );
           b?.click();
           return Boolean(b);
-        }, variant.open);
-        if (!opened) {
-          console.log(`FAIL  ${name} → ${variant.open}: switch not found`);
-          hardFails++;
-          continue;
+        }, text);
+
+      for (const variant of (VARIANTS[name] ?? [])) {
+        let opened = true;
+        for (const step of variant.open) {
+          if (!(await clickByText(step))) {
+            console.log(`FAIL  ${name} → ${variant.slug}: "${step}" not found`);
+            hardFails++;
+            opened = false;
+            break;
+          }
+          await page.waitForTimeout(variant.settle ?? 900);
         }
-        await page.waitForTimeout(900);
+        if (!opened) continue;
 
         const vr = await page.evaluate(auditPage, [!!device.touch, MIN_TAP]);
         await screenshotWholePage(
@@ -435,7 +452,7 @@ for (const device of DEVICES) {
         const vHard = vr.clipped.length + vr.cutoff.length;
         const vSoft = vr.overlaps.length + vr.smallTargets.length;
         console.log(
-          `${vHard ? "FAIL" : vSoft ? "warn" : "ok  "}  ${name} → ${variant.open}`,
+          `${vHard ? "FAIL" : vSoft ? "warn" : "ok  "}  ${name} → ${variant.slug}`,
         );
         for (const o of vr.cutoff) {
           console.log(
@@ -444,6 +461,11 @@ for (const device of DEVICES) {
         }
         for (const c of vr.clipped) {
           console.log(`        clipped ${c.px}px off ${c.side}: "${c.text}"`);
+        }
+        // Overlaps were missing here while the tab's own path printed them, so
+        // a variant could warn and say nothing about why.
+        for (const o of vr.overlaps.slice(0, 4)) {
+          console.log(`        overlap ${o.px}px: "${o.a}" / "${o.b}"`);
         }
         for (const t of vr.smallTargets.slice(0, 6)) {
           console.log(`        tap target ${t.min}px: "${t.label}"  class="${t.cls}"`);
@@ -455,12 +477,10 @@ for (const device of DEVICES) {
         // the strip is React-controlled and clicking the active tab is a
         // no-op, so the switch would stay where this loop left it and the
         // next device would measure the wrong view.
-        await page.evaluate((text) => {
-          [...document.querySelectorAll("button")]
-            .find((x) => x.textContent.includes(text))
-            ?.click();
-        }, variant.back);
-        await page.waitForTimeout(600);
+        for (const step of variant.back) {
+          await clickByText(step);
+          await page.waitForTimeout(600);
+        }
       }
     }
     await page.close();
