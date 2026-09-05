@@ -2,6 +2,10 @@
 // Source: Gemini chat captured in memory/reference_phetchaburi_energy_sim.md
 
 import type { Season, SimInputs } from "./types";
+import { PROVINCE_RESOURCE } from "./geo/attributes";
+
+/** The province this scenario is about. */
+export const PHETCHABURI_ISO = "TH-76";
 
 /** Preset scenarios — sidebar segmented control snaps inputs to one of these. */
 export type PresetId = "conservative" | "balanced" | "aggressive";
@@ -194,15 +198,59 @@ export const ANNUAL_DEMAND_FACTOR =
   MONTH_SEASON.reduce((sum, s) => sum + DEMAND_SEASON[s], 0) /
   MONTH_SEASON.length;
 
-/** Capacity factor per source, per season (annual average for daily total). */
+/**
+ * Solar capacity factor per season, measured rather than assumed.
+ *
+ * Derived here instead of typed in, so the model's single most important
+ * assumption points at a measurement. PVGIS (EU JRC) gives Phetchaburi's
+ * monthly PV output per installed kWp at optimal fixed tilt; MONTH_SEASON
+ * folds those twelve numbers into the four seasons the simulator runs.
+ *
+ * These replace a hand-set table that was badly wrong in shape. It ran
+ * summer 0.22 down to monsoon 0.05 — a 4.4x swing — where the satellites see
+ * 1.6x. Nearly all of the error was one season: monsoon at 0.05 against 0.128
+ * measured, so the model generated 39% of the real September and October
+ * output and sized storage for a solar drought that does not happen. The
+ * annual level was close (0.163 implied against 0.151 measured); it was the
+ * seasonality that was invented.
+ *
+ * Two independent satellite products agree on the monthly shape at r = 0.955,
+ * which is why this was worth acting on. See src/data/geo/attributes.ts.
+ */
+const SOLAR_CF_BY_SEASON: Record<Season, number> = (() => {
+  const monthly = PROVINCE_RESOURCE.find((r) => r.iso === PHETCHABURI_ISO)?.solarByMonth;
+  if (!monthly || monthly.length !== 12) {
+    throw new Error("attributes.ts has no monthly solar for Phetchaburi");
+  }
+  const sum = {} as Record<Season, number>;
+  const n = {} as Record<Season, number>;
+  MONTH_SEASON.forEach((s, i) => {
+    sum[s] = (sum[s] ?? 0) + monthly[i];
+    n[s] = (n[s] ?? 0) + 1;
+  });
+  return Object.fromEntries(
+    (Object.keys(sum) as Season[]).map((s) => [s, +(sum[s] / n[s]).toFixed(4)]),
+  ) as Record<Season, number>;
+})();
+
+/**
+ * Capacity factor per source, per season (annual average for daily total).
+ *
+ * Solar is measured. Wind, biomass and hydro are not, and wind in particular
+ * is left alone deliberately: NASA POWER's grid is about 55 km, coarse enough
+ * that a point on the Phetchaburi coast and one 30 km inland return identical
+ * speeds, which averages away the ridges turbines are actually built on. It
+ * would rank provinces but cannot size a farm, so replacing these with it
+ * would trade a guess for a different guess.
+ */
 export const CF_BY_SEASON: Record<
   Season,
   { solar: number; wind: number; biomass: number; hydro: number }
 > = {
-  summer: { solar: 0.22, wind: 0.12, biomass: 0.85, hydro: 0.05 },
-  rainy: { solar: 0.13, wind: 0.25, biomass: 0.8, hydro: 0.45 },
-  winter: { solar: 0.2, wind: 0.35, biomass: 0.8, hydro: 0.5 },
-  monsoon: { solar: 0.05, wind: 0.1, biomass: 0.75, hydro: 1.0 },
+  summer: { solar: SOLAR_CF_BY_SEASON.summer, wind: 0.12, biomass: 0.85, hydro: 0.05 },
+  rainy: { solar: SOLAR_CF_BY_SEASON.rainy, wind: 0.25, biomass: 0.8, hydro: 0.45 },
+  winter: { solar: SOLAR_CF_BY_SEASON.winter, wind: 0.35, biomass: 0.8, hydro: 0.5 },
+  monsoon: { solar: SOLAR_CF_BY_SEASON.monsoon, wind: 0.1, biomass: 0.75, hydro: 1.0 },
 };
 
 /** 24-hour solar "shape": peaks at noon, zero before 6 and after 18. */

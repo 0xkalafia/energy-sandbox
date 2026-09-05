@@ -207,14 +207,26 @@ describe("weather Monte Carlo", () => {
     });
     const summer = runMonteCarlo(DEFAULT_INPUTS, only("summer"));
     const monsoon = runMonteCarlo(DEFAULT_INPUTS, only("monsoon"));
-    // Monsoon is the worst solar season by a wide margin: summer covers itself
-    // and imports nothing, monsoon has to buy. If the weights were ignored the
-    // two would be identical.
-    expect(summer.percentiles.importGWh.p50).toBe(0);
-    expect(monsoon.percentiles.importGWh.p50).toBeGreaterThan(0);
-    expect(monsoon.percentiles.lowestSoC.p50).toBeLessThan(
-      summer.percentiles.lowestSoC.p50,
+    // Monsoon is still the worse solar season, so it imports more and runs the
+    // battery lower. If the weights were ignored the two would be identical.
+    //
+    // This used to assert that summer imported exactly nothing, and that
+    // stopped being true when CF_BY_SEASON's solar figures were replaced with
+    // PVGIS measurements: summer went from 0.22 to 0.165, which leaves the
+    // deterministic day at 44.3 GWh supply against 43.0 demand — a 3% margin
+    // that ordinary bad weather erases. The zero was never the point of this
+    // test, it was an artefact of a summer figure a third too high, and
+    // asserting it again would only pin the model back to the wrong number.
+    expect(monsoon.percentiles.importGWh.p50).toBeGreaterThan(
+      summer.percentiles.importGWh.p50,
     );
+    // Lowest SoC used to separate the two as well, and no longer can: with the
+    // corrected solar figures both seasons drive the battery down to the 10%
+    // depth-of-discharge floor, so the metric is clamped and comparing it
+    // would assert 0.1 < 0.1. That both now bottom out is itself the finding —
+    // under the old summer figure the battery had room to spare.
+    expect(summer.percentiles.lowestSoC.p50).toBeCloseTo(0.1, 2);
+    expect(monsoon.percentiles.lowestSoC.p50).toBeCloseTo(0.1, 2);
   });
 
   it("normalises weights, so doubling them all changes nothing", () => {

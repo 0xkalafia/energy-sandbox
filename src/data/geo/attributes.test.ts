@@ -99,39 +99,39 @@ describe("what the measurements say about the model's assumptions", () => {
     expect(Math.abs(modelled - pb.solarCF) / pb.solarCF).toBeLessThan(0.1);
   });
 
-  it("disagrees with it on the shape, and that disagreement is the finding", () => {
+  it("is where the season table's solar figures come from", () => {
+    // CF_BY_SEASON.solar is derived from these monthly numbers rather than
+    // typed in, so this checks the fold: each season is the mean of the months
+    // MONTH_SEASON assigns to it. A wrong fold — an off-by-one in the month
+    // map, or averaging the wrong way — would still produce four plausible
+    // numbers, which is exactly why it is worth pinning.
     const pb = byIso.get("TH-76")!;
     const real = bySeason(pb.solarByMonth!);
-    const swing = (o: Record<string, number>) =>
-      Math.max(...Object.values(o)) / Math.min(...Object.values(o));
-
-    const modelSwing = swing(
-      Object.fromEntries(
-        Object.entries(CF_BY_SEASON).map(([k, v]) => [k, v.solar]),
-      ),
-    );
-    // The model swings 4.4x from its best season to its worst. Measured,
-    // Phetchaburi runs 1.6x, and two independent satellite products agree on
-    // the monthly shape at r = 0.955. Asserting both sides keeps this test
-    // honest: it fails if the data starts claiming a swing it shouldn't, and
-    // it fails if someone edits CF_BY_SEASON without revisiting this.
-    expect(swing(real)).toBeLessThan(2);
-    expect(modelSwing).toBeGreaterThan(3);
+    for (const s of ["summer", "rainy", "winter", "monsoon"] as const) {
+      expect(CF_BY_SEASON[s].solar, s).toBeCloseTo(real[s], 3);
+    }
   });
 
-  it("does not let the monsoon collapse the way the model assumes", () => {
-    // CF_BY_SEASON puts monsoon solar at 0.05 against summer's 0.22 — the
-    // worst season keeping 23% of the best. No province measured comes close
-    // to collapsing that far: the deepest is Mae Hong Son, in the northwestern
+  it("keeps the seasonal swing as mild as the satellites say it is", () => {
+    // This table used to run summer 0.22 down to monsoon 0.05 — a 4.4x swing
+    // against a measured 1.6x — which had the model generating 39% of the real
+    // September and October output and sizing storage for a drought that does
+    // not happen. Guarding the swing means a future refetch, or a hand edit,
+    // cannot quietly reintroduce it.
+    const solar = Object.values(CF_BY_SEASON).map((v) => v.solar);
+    expect(Math.max(...solar) / Math.min(...solar)).toBeLessThan(2);
+  });
+
+  it("has no province collapsing the way the old table claimed", () => {
+    // The old table's worst season kept 23% of its best. No province measured
+    // comes near that: the deepest is Mae Hong Son, in the northwestern
     // mountains under the heaviest monsoon in the country, whose worst month
     // still keeps 48% of its best.
     //
     // The threshold is 0.4, which is neither of those numbers on purpose. Set
-    // at Mae Hong Son's 0.477 this test would only be restating the sample and
-    // would break on any refetch; set at the model's 0.23 it would pass even
-    // if the data started agreeing with the assumption it exists to question.
-    const modelRatio = CF_BY_SEASON.monsoon.solar / CF_BY_SEASON.summer.solar;
-    expect(modelRatio).toBeLessThan(0.4);
+    // at Mae Hong Son's 0.477 this test would only restate the sample and
+    // would break on any refetch; set at 0.23 it would pass even if the data
+    // started agreeing with the assumption it exists to question.
     for (const r of PROVINCE_RESOURCE) {
       const m = r.solarByMonth!;
       expect(Math.min(...m) / Math.max(...m), r.iso).toBeGreaterThan(0.4);
