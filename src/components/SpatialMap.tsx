@@ -250,7 +250,28 @@ export function SpatialMap({ inputs }: Props) {
                     value={`${sel.capacityMWPerKm2.toFixed(2)} MW/km²`}
                     color="var(--color-fg-subtle)"
                   />
+                  <Metric
+                    label="ปูแผงได้"
+                    value={`${Math.round(sel.buildableKm2).toLocaleString()} km²`}
+                    color={SERIES.emerald}
+                  />
+                  <Metric
+                    label="แผงกินที่"
+                    value={`${(sel.solarLandPct * 100).toFixed(1)}%`}
+                    color={sel.solarLandPct > 0.5 ? SERIES.rose : "var(--color-fg-subtle)"}
+                  />
                 </div>
+                {/* The answer to an obvious objection, kept live so it stays
+                    true when the sliders move. Kaeng Krachan is 77% national
+                    park and still takes 820 MW of solar, which sounds wrong
+                    until the land is counted: 9.2 km² of panels against 603
+                    km² outside the park. */}
+                <p className="mt-2 text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
+                  นอกเขตอุทยาน {Math.round(sel.buildableKm2).toLocaleString()} km²
+                  จาก {sel.km2.toLocaleString()} · แผง {Math.round(sel.solarMW)} MW
+                  ที่ 7 ไร่/MW กินที่ {(sel.solarMW * 0.0112).toFixed(1)} km²
+                  {sel.solarLandPct < 0.1 ? " — ที่ดินไม่ใช่ข้อจำกัด" : ""}
+                </p>
               </div>
               <p className="px-1 text-[10px] leading-relaxed text-[var(--color-fg-subtle)]">
                 การจัดสรรอิงน้ำหนักตามบทบาทแต่ละอำเภอ (Gemini distributed plan) ปรับ

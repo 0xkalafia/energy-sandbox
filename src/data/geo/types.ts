@@ -8,7 +8,10 @@ export interface AmphoeGeo {
   en: string;
   /** Area in km², from the boundary itself. */
   km2: number;
+  /** Label anchor, in viewBox units. */
   centroid: [number, number];
+  /** [lon, lat] in degrees — for asking a service about this place. */
+  lonLat: [number, number];
   path: string;
 }
 

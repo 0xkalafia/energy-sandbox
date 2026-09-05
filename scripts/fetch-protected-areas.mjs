@@ -175,7 +175,72 @@ const provinces = JSON.parse(
   )[1],
 );
 
+/**
+ * Grid window covering a set of rings, clamped to the raster.
+ *
+ * Everything below is measured and cleared through one of these. Sweeping the
+ * whole 1760 × 3020 grid once per amphoe would be 4.9 billion cell visits
+ * across the 931 of them; an amphoe's own window is a few thousand.
+ */
+function windowOf(ringList) {
+  let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+  for (const ring of ringList) {
+    for (const [lon, lat] of ring) {
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+  }
+  if (minLon === Infinity) return null;
+  return {
+    r0: Math.max(0, Math.floor((minLat - LAT0) / CELL) - 1),
+    r1: Math.min(NY - 1, Math.ceil((maxLat - LAT0) / CELL) + 1),
+    c0: Math.max(0, Math.floor((minLon - LON0) / CELL) - 1),
+    c1: Math.min(NX - 1, Math.ceil((maxLon - LON0) / CELL) + 1),
+  };
+}
+
+/** Count land and protected land under whatever is painted into `grid`. */
+function measure(grid, win) {
+  const { r0, r1, c0, c1 } = win ?? { r0: 0, r1: NY - 1, c0: 0, c1: NX - 1 };
+  let land = 0;
+  let prot = 0;
+  for (let r = r0; r <= r1; r++) {
+    const a = cellKm2(r);
+    const base = r * NX;
+    for (let c = c0; c <= c1; c++) {
+      const k = base + c;
+      if (!grid[k]) continue;
+      land += a;
+      if (park[k]) prot += a;
+    }
+  }
+  return { land, prot };
+}
+
+/** Zero just the window, so one scratch buffer serves every amphoe. */
+function clear(grid, win) {
+  for (let r = win.r0; r <= win.r1; r++) {
+    grid.fill(0, r * NX + win.c0, r * NX + win.c1 + 1);
+  }
+}
+
 const out = [];
+/**
+ * Per amphoe as well as per province, because the province figure cannot
+ * answer the question that prompted this.
+ *
+ * Phetchaburi is 45% protected, which sounds like a mild constraint spread
+ * evenly. It is not: nearly all of it is one amphoe. Kaeng Krachan is 42% of
+ * the province by area and the model hands it 1,520 MW of solar. Only an
+ * amphoe-level figure can say that the land is not there.
+ */
+const amphoeOut = [];
+// One scratch grid reused for every amphoe. Allocating per amphoe would be
+// 5.3 MB × 931 of churn on a machine that does not have it to spare.
+const scratch = new Uint8Array(NX * NY);
+
 for (const [i, p] of provinces.entries()) {
   const raw = JSON.parse(readFileSync(join(CACHE, `${p.iso}.json`), "utf8"));
   // One grid per province, reused across its amphoe: the union of the amphoe
@@ -184,21 +249,38 @@ for (const [i, p] of provinces.entries()) {
   // Ranong's denominator included Kawthoung and its protected share was
   // measured against 16,875 km² instead of 3,279.
   const prov = new Uint8Array(NX * NY);
-  for (const rel of raw.elements ?? []) {
-    if (!isThaiAmphoe(rel)) continue;
+  const units = (raw.elements ?? []).filter(isThaiAmphoe);
+  for (const rel of units) {
     paint(prov, [...rings(rel), ...rings(rel, { inner: true })]);
   }
-  let land = 0;
-  let prot = 0;
-  for (let r = 0; r < NY; r++) {
-    const a = cellKm2(r);
-    for (let c = 0; c < NX; c++) {
-      const k = r * NX + c;
-      if (!prov[k]) continue;
-      land += a;
-      if (park[k]) prot += a;
-    }
+
+  for (const rel of units) {
+    const rs = [...rings(rel), ...rings(rel, { inner: true })];
+    const win = windowOf(rs);
+    if (!win) continue;
+    paint(scratch, rs);
+    const m = measure(scratch, win);
+    clear(scratch, win);
+    if (m.land <= 0) continue;
+    amphoeOut.push({
+      id: String(rel.id),
+      iso: p.iso,
+      // The English name travels with the figure so a consumer can join on it
+      // without pulling in a province's geometry to look it up. districts.ts
+      // needs exactly this and nothing else; importing the amphoe module for
+      // it also defeated the lazy loading, since the bundler cannot both
+      // statically and dynamically split the same file.
+      en: (rel.tags?.["name:en"] ?? rel.tags?.name ?? "").replace(
+        / (District|Subdistrict)$/,
+        "",
+      ),
+      protectedFrac: +(m.prot / m.land).toFixed(3),
+      protectedKm2: +m.prot.toFixed(0),
+      rasterKm2: +m.land.toFixed(0),
+    });
   }
+
+  const { land, prot } = measure(prov, windowOf(units.flatMap((r) => rings(r))));
   out.push({
     iso: p.iso,
     protectedKm2: +prot.toFixed(0),
@@ -279,6 +361,27 @@ export interface ProvinceProtected {
 }
 
 export const PROVINCE_PROTECTED: ProvinceProtected[] = ${JSON.stringify(out, null, 1)};
+
+export interface AmphoeProtected {
+  /** OSM relation id — the same key AMPHOE uses. */
+  id: string;
+  iso: string;
+  /** OSM's English name, so a consumer can join without loading geometry. */
+  en: string;
+  protectedKm2: number;
+  protectedFrac: number;
+  rasterKm2: number;
+}
+
+/**
+ * The same measurement per amphoe, which is the resolution the question needs.
+ *
+ * A province figure spreads the constraint evenly and hides where it actually
+ * falls. Phetchaburi reads 45% protected; almost all of that is Kaeng Krachan,
+ * one amphoe that is 42% of the province — and the one the allocation hands
+ * the most solar to.
+ */
+export const AMPHOE_PROTECTED: AmphoeProtected[] = ${JSON.stringify(amphoeOut)};
 `,
 );
 

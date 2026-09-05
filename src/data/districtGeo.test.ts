@@ -179,3 +179,52 @@ describe("density is derived from the real area", () => {
     }
   });
 });
+
+describe("land the panels could actually stand on", () => {
+  /**
+   * The objection this answers: Kaeng Krachan is mostly national park, and the
+   * allocation still hands it 820 MW of solar. That reads like a contradiction
+   * and turns out not to be one, so these tests pin the measurement rather
+   * than the intuition — including the part that says the constraint does not
+   * bind, which is the part someone would otherwise "fix".
+   */
+  it("knows how much of each district is inside a park", () => {
+    // Measured from OSM: Kaeng Krachan 77%, Nong Ya Plong 63%, and the
+    // lowland districts essentially nothing.
+    const a = allocate(DEFAULT_INPUTS);
+    const frac = (id: string) => {
+      const x = a.find((y) => y.d.id === id)!;
+      return 1 - x.buildableKm2 / x.km2;
+    };
+    expect(frac("kaengkrachan")).toBeGreaterThan(0.6);
+    expect(frac("nongyaplong")).toBeGreaterThan(0.4);
+    expect(frac("mueang")).toBeLessThan(0.05);
+    expect(frac("banlaem")).toBeLessThan(0.05);
+  });
+
+  it("finds land is not what limits this plan, in any district", () => {
+    // 8.2 GW at 7 rai/MW is 92 km² against 3,365 km² outside the parks. Even
+    // the tightest district uses single-digit percentages of its own land.
+    const a = allocate(DEFAULT_INPUTS);
+    for (const x of a) {
+      expect(x.solarLandPct, x.d.id).toBeLessThan(0.15);
+    }
+    const total = a.reduce((s, x) => s + x.solarMW * 0.0112, 0);
+    const free = a.reduce((s, x) => s + x.buildableKm2, 0);
+    expect(total / free).toBeLessThan(0.05);
+  });
+
+  it("still bites if solar is pushed far past any preset", () => {
+    // The figure has to be able to say no, or showing it is decoration. At
+    // 300 GW — forty times the plan — the buildable land runs out.
+    const a = allocate({ ...DEFAULT_INPUTS, solarMW: 300_000 });
+    expect(Math.max(...a.map((x) => x.solarLandPct))).toBeGreaterThan(1);
+  });
+
+  it("counts buildable land as a real subset of the district", () => {
+    for (const x of allocate(DEFAULT_INPUTS)) {
+      expect(x.buildableKm2, x.d.id).toBeGreaterThan(0);
+      expect(x.buildableKm2, x.d.id).toBeLessThanOrEqual(x.km2);
+    }
+  });
+});

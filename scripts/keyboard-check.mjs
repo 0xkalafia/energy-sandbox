@@ -136,6 +136,81 @@ const browser = await chromium.launch({ executablePath: CHROME });
     `${charts.length} chart instance(s) across ${tabCount} tabs, ${unnamed.length} unnamed`,
   );
 
+  console.log("\n── the nationwide map, which is 77 buttons ──");
+  /*
+   * A map of 77 provinces cannot give each one a tab stop. Doing so would put
+   * 77 stops between the metric switch and everything after the map, and
+   * nobody tabs through that — they leave. So it is a roving tabindex: one
+   * stop for the whole map, arrow keys to move inside it, focus following
+   * selection.
+   *
+   * This is checked rather than assumed because the failure is invisible from
+   * the outside. The province map next door has eight districts and is simply
+   * tabbable; if someone copies that pattern here, nothing looks wrong and the
+   * tab order quietly grows by 77.
+   */
+  {
+    const tabHandles = await page.$$('[role="tab"]');
+    const mapIndex = (
+      await page.$$eval('[role="tab"]', (els) =>
+        els.map((e) => e.textContent.trim()),
+      )
+    ).findIndex((t) => t.includes("Map"));
+    await tabHandles[mapIndex].click();
+    await page.waitForTimeout(600);
+    const opened = await page.evaluate(() => {
+      const b = [...document.querySelectorAll("button")].find((x) =>
+        x.textContent.includes("ทั้งประเทศ"),
+      );
+      b?.click();
+      return Boolean(b);
+    });
+    await page.waitForTimeout(900);
+
+    const state = await page.evaluate(() => {
+      const gs = [...document.querySelectorAll("svg [data-iso]")];
+      return {
+        provinces: gs.length,
+        stops: gs.filter((g) => g.getAttribute("tabindex") === "0").length,
+        named: gs.filter((g) => (g.getAttribute("aria-label") ?? "").trim()).length,
+      };
+    });
+    check(
+      "the map is one tab stop, not 77",
+      opened && state.provinces > 70 && state.stops === 1,
+      `${state.provinces} provinces, ${state.stops} tab stop(s)`,
+    );
+    check(
+      "every province still announces itself",
+      state.named === state.provinces,
+      `${state.named}/${state.provinces} named`,
+    );
+
+    // Arrow keys have to move both the selection and the focus. Moving only
+    // the selection leaves the single stop on an element that just became
+    // untabbable, and the keyboard falls out of the map entirely — which is
+    // exactly what the first implementation did.
+    const moved = await page.evaluate(async () => {
+      const first = document.querySelector("svg [data-iso]");
+      first.focus();
+      const from = document.activeElement?.getAttribute("data-iso");
+      first.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      return {
+        from,
+        to: document.activeElement?.getAttribute("data-iso"),
+        pressed: document
+          .querySelector('[data-iso][aria-pressed="true"]')
+          ?.getAttribute("data-iso"),
+      };
+    });
+    check(
+      "arrow keys move focus, not just selection",
+      moved.to !== moved.from && moved.to === moved.pressed,
+      `${moved.from} → focus ${moved.to}, selected ${moved.pressed}`,
+    );
+  }
+
   const handles = await page.$$('[role="tab"]');
   await handles[0].click();
   await page.waitForTimeout(800);

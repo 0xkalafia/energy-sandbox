@@ -201,6 +201,13 @@ export const AMPHOE: AmphoeGeo[] = ${JSON.stringify(
       en: a.en,
       km2: Math.round(a.km2),
       centroid: projection.project(centroid(a.anchor)).map((v) => +v.toFixed(1)),
+      // Degrees as well as viewBox units, because a province is too coarse a
+      // thing to ask a weather service about. Measured inside Phetchaburi,
+      // PVGIS returns 0.147 in the Kaeng Krachan mountains and 0.160 on the
+      // coastal plain — a 9% spread, about half the entire nationwide range,
+      // from one province. Sampling per amphoe is what makes a province
+      // average mean anything.
+      lonLat: sampleLonLat([a.anchor], a.anchor),
       path: toPath(a.fine, projection.project),
     })),
   )};
@@ -229,7 +236,10 @@ export interface AmphoeGeo {
   en: string;
   /** Area in km², from the boundary itself. */
   km2: number;
+  /** Label anchor, in viewBox units. */
   centroid: [number, number];
+  /** [lon, lat] in degrees — for asking a service about this place. */
+  lonLat: [number, number];
   path: string;
 }
 

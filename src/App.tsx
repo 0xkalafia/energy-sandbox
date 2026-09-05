@@ -65,8 +65,8 @@ const Optimizer = lazy(() =>
 const HouseMode = lazy(() =>
   import("@/components/HouseMode").then((m) => ({ default: m.HouseMode })),
 );
-const SpatialMap = lazy(() =>
-  import("@/components/SpatialMap").then((m) => ({ default: m.SpatialMap })),
+const MapTab = lazy(() =>
+  import("@/components/MapTab").then((m) => ({ default: m.MapTab })),
 );
 const AnnualViews = lazy(() =>
   import("@/components/charts/AnnualViews").then((m) => ({
@@ -371,7 +371,7 @@ export default function App() {
               <Suspense
                 fallback={<ChartSkeleton title="Map…" height={420} />}
               >
-                <SpatialMap inputs={inputs} />
+                <MapTab inputs={inputs} />
               </Suspense>
             </TabsContent>
 

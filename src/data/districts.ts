@@ -1,6 +1,7 @@
 import type { SimInputs } from "@/data/types";
 import { computeDemandSizes } from "@/engine/simulate";
 import { DISTRICT_GEO } from "@/data/districtGeo";
+import { AMPHOE_PROTECTED } from "@/data/geo/protected";
 
 /**
  * The 8 amphoe of Phetchaburi, laid out schematically (NOT to scale).
@@ -98,6 +99,57 @@ export function districtKm2(id: string): number {
   return KM2[id] ?? 0;
 }
 
+/**
+ * How much of each district is inside a national park or wildlife sanctuary.
+ *
+ * Joined on the English name, because the two pipelines were built years apart
+ * and share no id: districtGeo.ts keys on a hand-written slug, the nationwide
+ * build keys on OSM's relation id. Both take their English name from the same
+ * OSM tag, so the name is the one thing they genuinely have in common — with
+ * one exception, since the older file calls the capital district "Mueang" and
+ * OSM calls it "Mueang Phetchaburi".
+ *
+ * An incomplete join throws. A district silently defaulting to 0% protected
+ * would report all of its land as buildable, which is the exact error this
+ * data exists to prevent.
+ */
+const PROTECTED_FRAC: Record<string, number> = (() => {
+  const byEn = new Map(
+    AMPHOE_PROTECTED.filter((a) => a.iso === "TH-76").map((a) => [
+      a.en,
+      a.protectedFrac,
+    ]),
+  );
+  const alias: Record<string, string> = { Mueang: "Mueang Phetchaburi" };
+  const out: Record<string, number> = {};
+  const unmatched: string[] = [];
+  for (const d of DISTRICTS) {
+    const frac = byEn.get(alias[d.en] ?? d.en);
+    if (frac == null) unmatched.push(`${d.id} (${d.en})`);
+    else out[d.id] = frac;
+  }
+  if (unmatched.length > 0) {
+    throw new Error(
+      `districts.ts: no protected-area figure for ${unmatched.join(", ")} — ` +
+        `re-run npm run fetch:parks, or the English names have drifted`,
+    );
+  }
+  return out;
+})();
+
+/** Land not inside a protected area, km². */
+export function buildableKm2(id: string): number {
+  return districtKm2(id) * (1 - (PROTECTED_FRAC[id] ?? 0));
+}
+
+/**
+ * Land a ground-mounted solar farm occupies, km² per MW.
+ *
+ * 7 rai/MW, which is the figure from real Thai project costing rather than a
+ * textbook one; 1 rai is 1,600 m².
+ */
+const KM2_PER_SOLAR_MW = (7 * 1600) / 1e6;
+
 export interface DistrictAlloc {
   d: District;
   solarMW: number;
@@ -110,6 +162,19 @@ export interface DistrictAlloc {
   capacityMW: number; // total installed generation
   /** Real district area, so the map can show intensity as well as totals. */
   km2: number;
+  /** Area outside any national park or sanctuary. */
+  buildableKm2: number;
+  /**
+   * Share of that buildable land this district's solar would cover.
+   *
+   * Worth showing because the intuition it tests turns out to be wrong.
+   * Kaeng Krachan is 77% national park and takes 820 MW of solar, which sounds
+   * like a contradiction until it is measured: 820 MW is 9.2 km² at 7 rai/MW,
+   * against 603 km² of unprotected land — 1.5% of it. Across the province the
+   * whole 8.2 GW needs 92 km² of 3,365. Land is not what limits this plan, and
+   * a number that says so is more useful than a warning that never fires.
+   */
+  solarLandPct: number;
   /** Installed generation per km² — a very different picture from the total,
    *  because Kaeng Krachan and Nong Ya Plong are 62% of the province between
    *  them and would otherwise look busiest simply for being biggest. */
@@ -153,6 +218,7 @@ export function allocate(inputs: SimInputs): DistrictAlloc[] {
     const capacityMW = solarMW + windMW + hydroMW;
     const genGWhDay = (capacityMW * 24 * 0.17) / 1000;
     const km2 = districtKm2(district.id);
+    const free = buildableKm2(district.id);
     return {
       d: district,
       solarMW,
@@ -164,6 +230,8 @@ export function allocate(inputs: SimInputs): DistrictAlloc[] {
       capacityMW,
       km2,
       capacityMWPerKm2: km2 > 0 ? capacityMW / km2 : 0,
+      buildableKm2: free,
+      solarLandPct: free > 0 ? (solarMW * KM2_PER_SOLAR_MW) / free : 0,
     };
   });
 }

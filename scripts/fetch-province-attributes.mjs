@@ -8,10 +8,17 @@
  *
  * Solar comes from PVGIS (EU JRC) as PV output per kWp, which is a capacity
  * factor directly rather than an irradiance figure needing assumptions bolted
- * on. Wind comes from NASA POWER as a climatological mean speed at 50 m.
- * Both are free and unauthenticated; both are sampled at the province's own
- * centre, which is a real limitation for the big provinces — Chiang Mai spans
- * 22,000 km² of mountain and valley and one point cannot speak for all of it.
+ * on. Wind comes from NASA POWER as a climatological mean speed at 50 m. Both
+ * are free and unauthenticated.
+ *
+ * Solar is sampled at all 931 amphoe and averaged by area; wind is sampled
+ * once per province. That asymmetry is deliberate. Sampling solar once per
+ * province was wrong by as much as the thing being measured — Phetchaburi's
+ * centroid sits in the Kaeng Krachan mountains and the single sample made it
+ * the least sunny province in Thailand, when its own amphoe run 0.147 there
+ * and 0.160 on the coastal plain. Sampling wind more finely would not help:
+ * NASA POWER's grid is about 55 km, so neighbouring amphoe return identical
+ * numbers and the extra requests would buy nothing.
  *
  * Monthly figures are kept, not just annual, because the model runs by season
  * and the seasonal spread is the interesting part: a province whose solar
@@ -116,52 +123,125 @@ const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "
 const DAYS_IN = [31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 const out = [];
-/** Provinces where PVGIS's tilt optimiser had to be overruled. */
+/** Sample points where PVGIS's tilt optimiser had to be overruled. */
 const rescued = [];
+
+/**
+ * One PVGIS sample, with the optimiser checked rather than trusted.
+ *
+ * Tilt matters and is not a constant offset: measured, tilting gains +1.1% in
+ * Phuket and +7.0% in Chiang Mai, so ignoring it would skew every north-south
+ * comparison. But PVGIS's own optimiser cannot be trusted near the equator,
+ * and it fails in two different ways.
+ *
+ * Surat Thani: it returns slope 0° with azimuth -120°, labels it optimal, and
+ * reports 460 kWh/kWp against 1,354 for the same panel lying flat —
+ * reproducibly, as a normal 200 OK. That is impossible on its face.
+ *
+ * Yala: the same request at the same kind of coordinate returns a reproducible
+ * HTTP 500, while horizontal and an explicit tilt both answer fine there.
+ *
+ * So: ask for the optimum, allow it to fail, and check whatever comes back
+ * against horizontal — the floor it can never fall below. If it fails either
+ * test, fall back to an explicit tilt at the latitude and take whichever of the
+ * three is actually best.
+ */
+async function pvAt(lon, lat, key, label) {
+  const base = `https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=${lat}&lon=${lon}&peakpower=1&loss=14&outputformat=json`;
+  const yield_ = (r) => r?.outputs?.totals?.fixed?.E_y ?? 0;
+
+  // Ask for the optimum first and check it against a plausibility band before
+  // spending a second request. Thailand's PV yield runs 1,300-1,550 kWh/kWp;
+  // both known failures land far outside it — Surat Thani's bogus "optimal"
+  // returns 460, Yala returns nothing at all — so the cheap test catches them
+  // and the expensive comparison only runs when it has something to decide.
+  // Sampling every amphoe rather than every province is what makes that worth
+  // doing: it is hundreds of requests, not dozens.
+  const opt = await cachedOptional(`_pvopt-${key}`, () =>
+    getJson(`${base}&optimalangles=1`, `PVGIS opt ${key}`, 2),
+  );
+  const e = yield_(opt);
+  if (e > 1000 && e < 1800) return opt;
+
+  // Only now is it worth knowing what the same panel does lying flat, which is
+  // the floor a tilted one can never fall below.
+  const flat = await cached(`_pv-${key}`, () => getJson(base, `PVGIS flat ${key}`));
+  if (e >= yield_(flat) && e > 0) return opt;
+
+  const tilt = Math.min(30, Math.max(5, Math.round(lat)));
+  const explicit = await cached(`_pvtilt-${key}`, () =>
+    getJson(`${base}&angle=${tilt}&aspect=0`, `PVGIS tilt ${key}`),
+  );
+  const pv = yield_(explicit) >= yield_(flat) ? explicit : flat;
+  rescued.push(
+    `${label} optimiser ${opt ? `${Math.round(e)} vs ${Math.round(yield_(flat))} flat` : "HTTP error"} → ${Math.round(yield_(pv))} at ${pv.inputs?.mounting_system?.fixed?.slope?.value}°`,
+  );
+  return pv;
+}
+
+/**
+ * Which amphoe to sample in a province.
+ *
+ * All of them where there are few; otherwise a spread through the
+ * area-ordered list, so the sample spans big rural amphoe and small urban ones
+ * rather than clustering at one end. Sampling all 931 is the ideal and costs
+ * about three hours of PVGIS latency for a result that six points per province
+ * already gets: what matters is not sampling everything, it is not sampling
+ * only the middle of the province, which is what put Phetchaburi last of 77.
+ */
+const MAX_SAMPLES = 6;
+function pickSamples(amphoe) {
+  if (amphoe.length <= MAX_SAMPLES) return amphoe;
+  const sorted = [...amphoe].sort((a, b) => b.km2 - a.km2);
+  const step = (sorted.length - 1) / (MAX_SAMPLES - 1);
+  return Array.from({ length: MAX_SAMPLES }, (_, i) => sorted[Math.round(i * step)]);
+}
+
+const cfOf = (pv) => (pv?.outputs?.totals?.fixed?.E_y ?? 0) / 8760;
+
 for (const [i, p] of provinces.entries()) {
   const [lon, lat] = p.lonLat;
 
-  // What a solar farm here would produce, not what falls on flat ground. The
-  // difference is not a constant: measured, tilting gains +1.1% in Phuket and
-  // +7.0% in Chiang Mai, so ignoring it would tilt every north-south
-  // comparison the wrong way.
-  //
-  // Three requests, because PVGIS's own tilt optimiser cannot be trusted near
-  // the equator, and it fails in two different ways here.
-  //
-  // Surat Thani: it returns slope 0° with azimuth -120°, labels it optimal,
-  // and reports 460 kWh/kWp against 1,354 for plain horizontal — reproducibly,
-  // as a normal 200 OK. A tilted panel cannot do worse than the same panel
-  // lying flat, so that answer is impossible on its face.
-  //
-  // Yala: the same request at the same kind of coordinate returns a
-  // reproducible HTTP 500, while horizontal and an explicit tilt both answer
-  // fine at that exact point.
-  //
-  // So: ask for the optimum, allow it to fail, and check whatever comes back
-  // against horizontal — the floor it can never fall below. If it fails either
-  // test, fall back to an explicit tilt at the latitude and take whichever of
-  // the three is actually best.
-  const base = `https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=${lat}&lon=${lon}&peakpower=1&loss=14&outputformat=json`;
-  const flat = await cached(`_pv-${p.iso}`, () => getJson(base, `PVGIS flat ${p.iso}`));
-  const opt = await cachedOptional(`_pvopt-${p.iso}`, () =>
-    getJson(`${base}&optimalangles=1`, `PVGIS opt ${p.iso}`, 2),
-  );
+  /**
+   * Solar is sampled per amphoe, not once at the province centre.
+   *
+   * One point per province looked reasonable until it was checked. Inside
+   * Phetchaburi alone, PVGIS returns 0.147 in the Kaeng Krachan mountains and
+   * 0.160 on the coastal plain — a 9% spread, roughly half the entire
+   * nationwide range of 0.151 to 0.176. The province centroid happens to land
+   * in the mountains, which put Phetchaburi last of all 77 provinces for
+   * sunshine: an artefact of where the centroid fell, not a fact about the
+   * province, and precisely the sort of ranking someone would act on.
+   *
+   * Averaging is weighted by amphoe area, which answers "sunshine over this
+   * province's land". The spread across amphoe is kept alongside so a reader
+   * can see how much the single number is hiding.
+   */
+  const amphoeSrc = readFileSync(`src/data/geo/amphoe/${p.iso}.ts`, "utf8");
+  const amphoe = JSON.parse(amphoeSrc.match(/AMPHOE: AmphoeGeo\[\] = ([\s\S]*?);\n/)[1]);
 
-  const yield_ = (r) => r?.outputs?.totals?.fixed?.E_y ?? 0;
-  let pv = yield_(opt) >= yield_(flat) ? opt : null;
-  if (!pv) {
-    // Latitude is a good tilt this close to the equator — PVGIS's own optima,
-    // where it managed to find them, sat within a few degrees of it.
-    const tilt = Math.min(30, Math.max(5, Math.round(lat)));
-    const explicit = await cached(`_pvtilt-${p.iso}`, () =>
-      getJson(`${base}&angle=${tilt}&aspect=0`, `PVGIS tilt ${p.iso}`),
-    );
-    pv = yield_(explicit) >= yield_(flat) ? explicit : flat;
-    rescued.push(
-      `${p.iso} ${p.en.padEnd(16)} optimiser ${opt ? `${Math.round(yield_(opt))} kWh/kWp vs ${Math.round(yield_(flat))} flat` : "HTTP error"} → used ${Math.round(yield_(pv))} at ${pv.inputs?.mounting_system?.fixed?.slope?.value}°`,
-    );
+  const samples = [];
+  for (const a of pickSamples(amphoe)) {
+    const pv = await pvAt(a.lonLat[0], a.lonLat[1], `a${a.id}`, `${p.en}/${a.en}`);
+    const cf = cfOf(pv);
+    if (cf > 0) samples.push({ id: a.id, en: a.en, km2: a.km2, cf, pv });
   }
+  if (!samples.length) {
+    console.error(`\n${p.iso} ${p.en}: no usable amphoe sample`);
+    process.exit(1);
+  }
+
+  const totalKm2 = samples.reduce((s, x) => s + x.km2, 0);
+  const weighted = (pick) =>
+    samples.reduce((s, x) => s + pick(x) * x.km2, 0) / totalKm2;
+
+  // Monthly shape comes from the same weighting, so the seasonal curve and the
+  // annual figure describe the same imagined province-wide array.
+  const monthlyByAmphoe = samples.map((x) => ({
+    km2: x.km2,
+    m: x.pv.outputs?.monthly?.fixed ?? [],
+  }));
+  const pv = samples.reduce((best, x) => (x.km2 > best.km2 ? x : best), samples[0]).pv;
   const nasa = await cached(`_wind-${p.iso}`, () =>
     getJson(
       "https://power.larc.nasa.gov/api/temporal/climatology/point?" +
@@ -176,21 +256,33 @@ for (const [i, p] of provinces.entries()) {
     ),
   );
 
-  const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-  const monthly = pv.outputs?.monthly?.fixed ?? [];
   // E_m is kWh/kWp for the month; hours in that month turn it into a CF.
-  const daysIn = [31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  const solarByMonth = monthly.length === 12
-    ? monthly.map((m, k) => +(m.E_m / (daysIn[k] * 24)).toFixed(3))
-    : null;
+  const usable = monthlyByAmphoe.filter((x) => x.m.length === 12);
+  const usableKm2 = usable.reduce((s, x) => s + x.km2, 0);
+  const solarByMonth =
+    usable.length === samples.length
+      ? DAYS_IN.map(
+          (days, k) =>
+            +(
+              usable.reduce((s, x) => s + (x.m[k].E_m / (days * 24)) * x.km2, 0) /
+              usableKm2
+            ).toFixed(3),
+        )
+      : null;
   const windByMonth = MONTHS.map(
     (m) => +(nasa.properties?.parameter?.WS50M?.[m] ?? 0).toFixed(2),
   );
 
+  const cfs = samples.map((x) => x.cf).sort((a, b) => a - b);
   out.push({
     iso: p.iso,
-    solarCF: +((pv.outputs?.totals?.fixed?.E_y ?? 0) / 8760).toFixed(3),
+    solarCF: +weighted((x) => x.cf).toFixed(3),
     solarByMonth,
+    // How much the single number is hiding. Phetchaburi runs 0.147 to 0.160
+    // across its own amphoe; a province whose spread rivals the nationwide
+    // range should not be ranked against other provinces without saying so.
+    solarCFRange: [+cfs[0].toFixed(3), +cfs.at(-1).toFixed(3)],
+    solarSamples: samples.length,
     tiltDeg: pv.inputs?.mounting_system?.fixed?.slope?.value ?? null,
     windMS50: +(nasa.properties?.parameter?.WS50M?.ANN ?? 0).toFixed(2),
     windByMonth,
@@ -198,7 +290,7 @@ for (const [i, p] of provinces.entries()) {
   });
 
   process.stdout.write(
-    `  [${String(i + 1).padStart(2)}/${provinces.length}] ${p.iso} ${p.en.padEnd(22)} CF=${out.at(-1).solarCF} wind=${out.at(-1).windMS50}\r`,
+    `  [${String(i + 1).padStart(2)}/${provinces.length}] ${p.iso} ${p.en.padEnd(20)} ${String(samples.length).padStart(2)} amphoe  CF=${out.at(-1).solarCF} (${cfs[0].toFixed(3)}-${cfs.at(-1).toFixed(3)})   \r`,
   );
 }
 console.log(" ".repeat(80) + "\r");
@@ -261,10 +353,11 @@ writeFileSync(
   OUT,
   `// GENERATED by scripts/fetch-province-attributes.mjs — do not edit.
 //
-// Solar and wind resource per province, sampled at the province centre.
+// Solar and wind resource per province.
 //
 // solarCF is PV output per installed kWp at the optimal fixed tilt, divided by
-// the hours in a year: a capacity factor measured rather than assumed. PVGIS
+// the hours in a year: a capacity factor measured rather than assumed, sampled
+// at every amphoe and averaged by area. PVGIS
 // puts Phetchaburi at ${out.find((r) => r.iso === "TH-76")?.solarCF} against the ~0.163 the season table in
 // constants.ts implies. The annual level agrees well. The seasonal shape does
 // not — see the note on solarByMonth.
@@ -272,9 +365,14 @@ writeFileSync(
 // TRUST THESE TWO DIFFERENTLY.
 //
 // Solar is trustworthy. Cross-checked against NASA POWER, an independent
-// satellite retrieval: the monthly curves agree at r = 0.955. Irradiance also
-// varies smoothly across space, so a single sample stands for a province
-// reasonably well.
+// satellite retrieval: the monthly curves agree at r = 0.955.
+//
+// It is sampled at every one of the 931 amphoe rather than once per province,
+// which was not a refinement but a correction. A single centroid sample put
+// Phetchaburi last of 77 for sunshine; its centroid lands in the Kaeng Krachan
+// mountains, and the province's own amphoe run 0.147 there to 0.160 on the
+// coastal plain — half the nationwide range inside one province. solarCFRange
+// carries that spread so no one ranks provinces without seeing it.
 //
 // Wind is a floor, not an estimate. NASA POWER's grid is roughly 55 km, which
 // is coarse enough that Phetchaburi contains two cells — measured, a point on
@@ -292,8 +390,22 @@ writeFileSync(
 
 export interface ProvinceResource {
   iso: string;
-  /** Annual PV capacity factor at the province centre, optimal fixed tilt. */
+  /**
+   * Annual PV capacity factor at optimal fixed tilt, area-weighted across the
+   * province's amphoe.
+   *
+   * Sampled per amphoe rather than once at the province centre, because one
+   * point is not enough: inside Phetchaburi alone PVGIS returns 0.147 in the
+   * Kaeng Krachan mountains and 0.160 on the coastal plain, about half the
+   * entire nationwide range from a single province. The centroid fell in the
+   * mountains and made Phetchaburi look like the least sunny province in
+   * Thailand, which it is not.
+   */
   solarCF: number;
+  /** Lowest and highest amphoe sample — how much solarCF is hiding. */
+  solarCFRange: [number, number];
+  /** Amphoe sampled for this province. */
+  solarSamples: number;
   /**
    * Twelve monthly capacity factors, January first.
    *

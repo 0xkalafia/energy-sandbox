@@ -168,6 +168,60 @@ function auditSvgContrast() {
 const browser = await chromium.launch({ executablePath: CHROME });
 let failures = 0;
 
+/**
+ * Run axe plus the SVG contrast measurement over whatever is on screen now,
+ * print one row, and return how many hard failures it found.
+ *
+ * Extracted so a tab and a view hidden behind that tab's own switch are
+ * audited by identical code — the alternative was a second, slightly
+ * different copy, which is how one of them ends up quietly weaker.
+ */
+async function auditOne(page, label) {
+  const results = await page.evaluate(async () => {
+    const r = await axe.run(document, {
+      resultTypes: ["violations"],
+      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] },
+    });
+    return r.violations.map((v) => ({
+      id: v.id,
+      impact: v.impact,
+      help: v.help,
+      count: v.nodes.length,
+      sample: v.nodes[0]?.html?.slice(0, 90) ?? "",
+      target: v.nodes[0]?.target?.[0] ?? "",
+    }));
+  });
+
+  const { examined, fails: contrast } = await page.evaluate(auditSvgContrast);
+
+  const serious = results.filter(
+    (v) => v.impact === "serious" || v.impact === "critical",
+  );
+  const minor = results.filter(
+    (v) => v.impact !== "serious" && v.impact !== "critical",
+  );
+  const bad = serious.length + contrast.length;
+  console.log(
+    `${bad ? "FAIL" : minor.length ? "warn" : "ok  "}  ${label}  ` +
+      `(${examined} chart labels measured)`,
+  );
+
+  for (const v of serious) {
+    console.log(`        [${v.impact}] ${v.id} ×${v.count} — ${v.help}`);
+    console.log(`              ${v.target}  ${v.sample}`);
+  }
+  for (const v of minor) {
+    console.log(`        (${v.impact}) ${v.id} ×${v.count} — ${v.help}`);
+  }
+  for (const c of contrast) {
+    console.log(
+      `        contrast ${c.ratio}:1 (needs ${c.need}) at ${c.size}px ×${c.count} — "${c.text}"`,
+    );
+  }
+  return bad;
+}
+
+
 for (const scheme of ["light", "dark"]) {
   if (ONLY_SCHEME && scheme !== ONLY_SCHEME) continue;
 
@@ -182,6 +236,33 @@ for (const scheme of ["light", "dark"]) {
     els.map((e) => e.textContent.trim()),
   );
   console.log(`\n══ ${scheme} ══`);
+
+  /**
+   * Sub-views a tab hides behind its own switch.
+   *
+   * Walking the tab strip alone reported "ok Map" while examining half of
+   * what the Map tab contains: the nationwide view sits behind a segmented
+   * control and never rendered, so its 77 province buttons were never
+   * audited. A pass that reports on a view it did not open is worse than no
+   * pass, so anything reachable by one click from a tab is listed here and
+   * checked as its own row.
+   */
+  const VARIANTS = {
+    Map: ["ทั้งประเทศ 77 จังหวัด"],
+  };
+  /**
+   * How to get a tab back to the view it opens on.
+   *
+   * Re-clicking the tab does not do it: the tab strip is React-controlled and
+   * clicking the already-active tab is a no-op, so the switch inside stays
+   * where the variant loop left it. That was not a theory — the run that
+   * introduced this reported "Map (0 chart labels measured)" where it had
+   * always said 8, because both rows were auditing the nationwide view and one
+   * of them was lying about which.
+   */
+  const DEFAULT_VIEW = {
+    Map: "เพชรบุรี 8 อำเภอ",
+  };
 
   for (let i = 0; i < tabs.length; i++) {
     const handles = await page.$$('[role="tab"]');
@@ -198,48 +279,39 @@ for (const scheme of ["light", "dark"]) {
     // one document, so once per page is enough.
     if (i === 0) await page.addScriptTag({ path: AXE_PATH });
 
-    const results = await page.evaluate(async () => {
-      const r = await axe.run(document, {
-        resultTypes: ["violations"],
-        runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] },
-      });
-      return r.violations.map((v) => ({
-        id: v.id,
-        impact: v.impact,
-        help: v.help,
-        count: v.nodes.length,
-        sample: v.nodes[0]?.html?.slice(0, 90) ?? "",
-        target: v.nodes[0]?.target?.[0] ?? "",
-      }));
-    });
-
-    const { examined, fails: contrast } = await page.evaluate(auditSvgContrast);
-
-    const serious = results.filter(
-      (v) => v.impact === "serious" || v.impact === "critical",
-    );
-    const minor = results.filter(
-      (v) => v.impact !== "serious" && v.impact !== "critical",
-    );
-    const bad = serious.length + contrast.length;
-    console.log(
-      `${bad ? "FAIL" : minor.length ? "warn" : "ok  "}  ${tabs[i]}  ` +
-        `(${examined} chart labels measured)`,
-    );
-
-    for (const v of serious) {
-      console.log(`        [${v.impact}] ${v.id} ×${v.count} — ${v.help}`);
-      console.log(`              ${v.target}  ${v.sample}`);
+    for (const label of VARIANTS[tabs[i]] ?? []) {
+      const clicked = await page.evaluate((text) => {
+        const b = [...document.querySelectorAll("button")].find((x) =>
+          x.textContent.includes(text),
+        );
+        b?.click();
+        return Boolean(b);
+      }, label);
+      if (!clicked) {
+        console.log(`FAIL  ${tabs[i]} → ${label}: switch not found`);
+        failures++;
+        continue;
+      }
+      await page.waitForTimeout(700);
+      await auditOne(page, `${tabs[i]} → ${label}`);
     }
-    for (const v of minor) {
-      console.log(`        (${v.impact}) ${v.id} ×${v.count} — ${v.help}`);
+    const back = DEFAULT_VIEW[tabs[i]];
+    if (back) {
+      const ok = await page.evaluate((text) => {
+        const b = [...document.querySelectorAll("button")].find((x) =>
+          x.textContent.includes(text),
+        );
+        b?.click();
+        return Boolean(b);
+      }, back);
+      if (!ok) {
+        console.log(`FAIL  ${tabs[i]}: could not return to "${back}"`);
+        failures++;
+      }
+      await page.waitForTimeout(700);
     }
-    for (const c of contrast) {
-      console.log(
-        `        contrast ${c.ratio}:1 (needs ${c.need}) at ${c.size}px ×${c.count} — "${c.text}"`,
-      );
-    }
-    failures += bad;
+
+    failures += await auditOne(page, tabs[i]);
   }
   await page.close();
 }
