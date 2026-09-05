@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { StatCard } from "@/components/ui/StatCard";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { SERIES } from "@/lib/chartTheme";
+import { ramp } from "@/lib/choropleth";
+import { ChoroplethLegend } from "@/components/ui/ChoroplethLegend";
 import { PROVINCES, GEO_VIEWBOX } from "@/data/geo/provinces";
 import { PROVINCE_ELECTRICITY } from "@/data/geo/electricity";
 import { PROVINCE_RESOURCE } from "@/data/geo/attributes";
 import { PROVINCE_PROTECTED } from "@/data/geo/protected";
 import { PHETCHABURI_ISO } from "@/data/constants";
 import { AmphoeMap } from "@/components/AmphoeMap";
+import { ProvincePanel } from "@/components/ProvincePanel";
 import { useMapZoom } from "@/lib/useMapZoom";
+import { useRovingFocus } from "@/lib/useRovingFocus";
 import { loadAmphoe } from "@/data/geo/provinces";
 import type { AmphoeGeo } from "@/data/geo/types";
 
@@ -102,16 +104,6 @@ const METRICS: Metric[] = [
 ];
 
 /**
- * Shade across the observed range, not from zero — the same reasoning as the
- * province map. Solar CF nationwide spans 0.151 to 0.176; from zero that is
- * 77 identical shapes.
- */
-function ramp(value: number, min: number, max: number): number {
-  const t = max - min < 1e-9 ? 0.5 : (value - min) / (max - min);
-  return 0.12 + 0.76 * t;
-}
-
-/**
  * Electricity spans three orders of magnitude — Bangkok 103 GWh/day against
  * Mae Hong Son 0.46 — so a linear ramp paints 76 provinces the palest shade
  * and Bangkok the darkest, which is a picture of Bangkok, not of Thailand.
@@ -134,15 +126,21 @@ export function ThailandMap() {
   const [zoomed, setZoomed] = useState<string | null>(null);
   const metric = METRICS.find((m) => m.id === metricId)!;
 
-  /** Set only by arrow navigation, so a mouse click never steals focus. */
-  const moveFocus = useRef(false);
-
   const { view, zoom, svgRef, zoomBy, reset, wasDrag, handlers } = useMapZoom({
     // Module-level, not an inline literal: a fresh object every render makes
     // every callback inside the hook a fresh identity too, which is exactly
     // the churn memoising them was meant to avoid.
     full: FULL_VIEW,
     maxZoom: 20,
+  });
+
+  const roving = useRovingFocus({
+    items: PROVINCES,
+    selected,
+    onSelect: setSelected,
+    attribute: "data-iso",
+    key: (p) => p.iso,
+    container: svgRef,
   });
 
   /**
@@ -230,14 +228,6 @@ export function ThailandMap() {
     };
   }, [wantAmphoeShading, amphoeProtOf.size]);
 
-  useEffect(() => {
-    if (!moveFocus.current) return;
-    moveFocus.current = false;
-    svgRef.current
-      ?.querySelector<SVGGElement>(`[data-iso="${selected}"]`)
-      ?.focus();
-  }, [selected, svgRef]);
-
   const { scaled, min, max, missing } = useMemo(() => {
     const raw = PROVINCES.map((p) => ({ iso: p.iso, v: metric.value(p.iso) }));
     const present = raw.filter((r) => r.v != null) as { iso: string; v: number }[];
@@ -305,31 +295,21 @@ export function ThailandMap() {
                 onChange={setMetricId}
                 options={METRICS.map((m) => ({ value: m.id, label: m.label }))}
               />
-              {/* The ramp is anchored to the observed range, and for
-                  electricity it is logarithmic, so the ends have to be printed
-                  or the shading means nothing. */}
-              <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-fg-subtle)]">
-                <span className="tabular">
-                  {wantAmphoeShading
+              {/* Anchored to the observed range, and logarithmic for
+                  electricity, so the ends have to be printed or the shading
+                  means nothing. */}
+              <ChoroplethLegend
+                hue={metric.hue}
+                low={
+                  wantAmphoeShading
                     ? "0%"
-                    : metric.format(ranked[ranked.length - 1]?.v ?? 0)}
-                </span>
-                <span className="flex h-3 w-16 overflow-hidden rounded-sm border border-[var(--color-border)]">
-                  {[0, 0.25, 0.5, 0.75, 1].map((t) => (
-                    <span
-                      key={t}
-                      className="flex-1"
-                      style={{ background: metric.hue, opacity: 0.12 + 0.76 * t }}
-                    />
-                  ))}
-                </span>
-                {/* The scale changes under the amphoe layer, so the legend
-                    has to change with it or it describes a different map. */}
-                <span className="tabular">
-                  {wantAmphoeShading ? "100% รายอำเภอ" : metric.format(ranked[0]?.v ?? 0)}
-                </span>
-                {NEEDS_LOG.has(metric.id) && <span className="ml-1">(log)</span>}
-              </div>
+                    : metric.format(ranked[ranked.length - 1]?.v ?? 0)
+                }
+                high={
+                  wantAmphoeShading ? "100% รายอำเภอ" : metric.format(ranked[0]?.v ?? 0)
+                }
+                note={NEEDS_LOG.has(metric.id) ? "(log)" : undefined}
+              />
             </div>
           </div>
         </CardHeader>
@@ -397,14 +377,7 @@ export function ThailandMap() {
                     <g
                       key={p.iso}
                       role="button"
-                      // Roving tabindex: one stop for the whole map, arrows to
-                      // move within it. Giving all 77 provinces tabIndex 0
-                      // would put 77 stops between the metric buttons and
-                      // everything after the map, which is a worse keyboard
-                      // experience than no map at all. The province map next
-                      // door has eight and can afford to be simple; this one
-                      // cannot.
-                      tabIndex={isSel ? 0 : -1}
+                      tabIndex={roving.isTabStop(idx) ? 0 : -1}
                       aria-label={`${p.th} ${p.en} ${
                         v == null ? "ไม่มีข้อมูล" : metric.format(v)
                       }`}
@@ -416,40 +389,7 @@ export function ThailandMap() {
                         if (wasDrag()) return;
                         setSelected(p.iso);
                       }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setSelected(p.iso);
-                          return;
-                        }
-                        const step =
-                          e.key === "ArrowRight" || e.key === "ArrowDown"
-                            ? 1
-                            : e.key === "ArrowLeft" || e.key === "ArrowUp"
-                              ? -1
-                              : e.key === "Home"
-                                ? -idx
-                                : e.key === "End"
-                                  ? PROVINCES.length - 1 - idx
-                                  : 0;
-                        if (!step) return;
-                        e.preventDefault();
-                        const next =
-                          PROVINCES[
-                            (idx + step + PROVINCES.length) % PROVINCES.length
-                          ];
-                        // Focus has to follow selection, or the single roving
-                        // stop is left on an element that just became
-                        // untabbable and the keyboard falls out of the map.
-                        // Moving it here does not work: the element is not
-                        // tabbable until React commits, and a focus() scheduled
-                        // in a frame callback lands either side of that commit
-                        // depending on timing — measured, it silently did
-                        // nothing. The effect below runs after the commit,
-                        // which is the only moment the target is ready.
-                        moveFocus.current = true;
-                        setSelected(next.iso);
-                      }}
+                      onKeyDown={(e) => roving.onKeyDown(e, idx)}
                       data-iso={p.iso}
                     >
                       {/* Plain presentation attributes, deliberately. An
@@ -564,154 +504,21 @@ export function ThailandMap() {
               )}
             </div>
 
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-medium">
-                  {sel.th}{" "}
-                  <span className="text-[var(--color-fg-subtle)]">{sel.en}</span>
-                </h3>
-                {sel.iso === PHETCHABURI_ISO && (
-                  <Badge tone="emerald">จังหวัดของโมเดลนี้</Badge>
-                )}
-                {selRes?.coastal && <Badge tone="sky">ติดทะเล</Badge>}
-                {selRank >= 0 && (
-                  <span className="text-[11px] text-[var(--color-fg-subtle)]">
-                    อันดับ {selRank + 1} จาก {ranked.length} ด้าน{metric.label}
-                  </span>
-                )}
-              </div>
-
-              {/* Into the third level. The button lives here rather than on the
-                  map itself because a click on a province already means
-                  "select", and overloading it with "enter" would make one of
-                  the two unreachable by keyboard. */}
-              <button
-                onClick={() => setZoomed(sel.iso)}
-                className="w-full rounded-md border border-[var(--color-border)] px-3 py-2 text-left text-[11px] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] pointer-coarse:min-h-[36px]"
-              >
-                ดูรายอำเภอ — {sel.th} มี {sel.amphoeCount} อำเภอ →
-              </button>
-
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                <StatCard
-                  label="ไฟที่ใช้"
-                  value={selElec ? `${selElec.gwhPerDay.toFixed(2)}` : "—"}
-                  sub="GWh/วัน · 2566"
-                  tone="amber"
-                  info="ไฟฟ้าที่ใช้จริงทุกประเภทผู้ใช้ จากกระทรวงพลังงาน ไม่ใช่ค่าประมาณ"
-                />
-                <StatCard
-                  label="ต่อคน"
-                  value={selElec?.kwhPerPerson?.toLocaleString() ?? "—"}
-                  sub="kWh/ปี"
-                  tone="neutral"
-                />
-                <StatCard
-                  label="พื้นที่"
-                  value={sel.km2.toLocaleString()}
-                  sub={`km² · ${sel.amphoeCount} อำเภอ`}
-                  tone="neutral"
-                />
-                <StatCard
-                  label="แดด"
-                  value={selRes ? selRes.solarCF.toFixed(3) : "—"}
-                  // The range matters more than the figure. A province whose
-                  // own amphoe span as much as the country does cannot be
-                  // meaningfully ranked against its neighbours, and the card
-                  // should say so where the number is read, not only in the
-                  // caption above the map.
-                  sub={
-                    selRes
-                      ? `CF · ${selRes.solarSamples} อำเภอ: ${selRes.solarCFRange[0].toFixed(3)}-${selRes.solarCFRange[1].toFixed(3)}`
-                      : "CF"
-                  }
-                  tone="amber"
-                  info="PVGIS วัดรายอำเภอที่มุมเอียงดีที่สุด แล้วถ่วงน้ำหนักตามพื้นที่ · ช่วงคือค่าต่ำสุด-สูงสุดของอำเภอในจังหวัดนี้"
-                />
-                <StatCard
-                  label="ลม 50 ม."
-                  value={selRes ? selRes.windMS50.toFixed(2) : "—"}
-                  sub="m/s"
-                  tone="sky"
-                  info="NASA POWER กริดราว 55 กม. เกลี่ยสันเขาหายไป ใช้จัดอันดับได้ ใช้ออกแบบฟาร์มไม่ได้"
-                />
-                <StatCard
-                  label="พื้นที่อนุรักษ์"
-                  value={selProt ? `${(selProt.protectedFrac * 100).toFixed(0)}%` : "—"}
-                  sub={selProt ? `${selProt.protectedKm2.toLocaleString()} km²` : ""}
-                  tone="emerald"
-                  info="อุทยาน เขตรักษาพันธุ์สัตว์ป่า และเขตสงวน จาก OpenStreetMap"
-                />
-              </div>
-
-              {selElec && (
-                <div className="rounded-lg border border-[var(--color-border)] p-3">
-                  <p className="mb-2 text-[11px] text-[var(--color-fg-muted)]">
-                    แยกตามประเภทผู้ใช้ไฟ (GWh/ปี)
-                  </p>
-                  <div className="space-y-1">
-                    {(
-                      [
-                        ["ที่อยู่อาศัย", selElec.byClass.residential],
-                        ["ธุรกิจ/อุตสาหกรรม", selElec.byClass.business],
-                        ["ราชการ/ไฟสาธารณะ", selElec.byClass.government],
-                        ["สูบน้ำเกษตร", selElec.byClass.agriculture],
-                        ["สถานีชาร์จ EV", selElec.byClass.ev],
-                      ] as const
-                    ).map(([label, v]) => (
-                      <div key={label} className="flex items-center gap-2 text-[11px]">
-                        <span className="w-32 shrink-0 text-[var(--color-fg-muted)]">
-                          {label}
-                        </span>
-                        <span
-                          className="h-2 rounded-sm"
-                          style={{
-                            background: SERIES.solar,
-                            width: `${Math.max(1, (v / selElec.gwhPerYear) * 100)}%`,
-                            opacity: 0.7,
-                          }}
-                        />
-                        <span className="tabular text-[var(--color-fg-subtle)]">
-                          {v.toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  {/* "ธุรกิจ" here is a tariff class, not an economic sector:
-                      it is small through large-scale supply, defined by
-                      connected load, so it holds a mall and a factory alike. */}
-                  <p className="mt-2 text-[10px] text-[var(--color-fg-subtle)]">
-                    เป็นประเภทค่าไฟ ไม่ใช่สาขาเศรษฐกิจ — "ธุรกิจ" รวมทั้งห้างและโรงงาน
-                  </p>
-                </div>
-              )}
-
-              <div className="rounded-lg border border-[var(--color-border)] p-3">
-                <p className="mb-1.5 text-[11px] text-[var(--color-fg-muted)]">
-                  สุดขั้วด้าน{metric.label}
-                </p>
-                {extremes.map((r, i) => (
-                  <div
-                    key={r.p.iso}
-                    className="flex items-center justify-between text-[11px]"
-                  >
-                    {/* 11px text makes a 17px button, which is half the
-                        minimum tap target. Grown on coarse pointers only, so
-                        the desktop density is unchanged — the same treatment
-                        the segmented controls use. */}
-                    <button
-                      onClick={() => setSelected(r.p.iso)}
-                      className="flex items-center text-left underline-offset-2 hover:underline pointer-coarse:min-h-[36px]"
-                    >
-                      {i === 0 ? "สูงสุด" : "ต่ำสุด"} · {r.p.th}
-                    </button>
-                    <span className="tabular text-[var(--color-fg-subtle)]">
-                      {metric.format(r.v!)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ProvincePanel
+              province={sel}
+              electricity={selElec}
+              resource={selRes}
+              protectedArea={selProt}
+              rank={
+                selRank >= 0
+                  ? { position: selRank + 1, of: ranked.length, metricLabel: metric.label }
+                  : null
+              }
+              extremes={extremes.map((r) => ({ province: r.p, value: r.v! }))}
+              formatMetric={metric.format}
+              onSelect={setSelected}
+              onDrillDown={setZoomed}
+            />
           </div>
         </CardContent>
       </Card>

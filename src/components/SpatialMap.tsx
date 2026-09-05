@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/Badge";
 import { StatCard } from "@/components/ui/StatCard";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { SERIES } from "@/lib/chartTheme";
+import { ramp } from "@/lib/choropleth";
+import { ChoroplethLegend } from "@/components/ui/ChoroplethLegend";
 import { fmtPower } from "@/lib/utils";
 import { allocate, type DistrictAlloc } from "@/data/districts";
 import {
@@ -32,20 +34,6 @@ const METRICS: { value: Metric; label: string }[] = [
   { value: "total", label: "ยอดรวม" },
   { value: "density", label: "ต่อ km²" },
 ];
-
-/**
- * Shade across the observed range rather than from zero.
- *
- * Measured on the default scenario, totals run 990 to 1,910 MW — every
- * district between half and full, which as a fill from zero is eight
- * near-identical shapes. Density runs 0.59 to 6.03 MW/km², a tenfold spread.
- * Anchoring the ramp to min and max makes both readable; the legend prints the
- * two ends so nobody reads the darkest patch as an absolute.
- */
-function ramp(value: number, min: number, max: number): number {
-  const t = max - min < 1e-9 ? 0.5 : (value - min) / (max - min);
-  return 0.14 + 0.72 * t;
-}
 
 const GEO_BY_ID = Object.fromEntries(DISTRICT_GEO.map((g) => [g.id, g]));
 
@@ -84,21 +72,14 @@ export function SpatialMap({ inputs }: Props) {
                 onChange={setMetric}
                 options={METRICS}
               />
-              {/* The ramp is anchored to this scenario's own min and max, so
-                  the ends have to be printed or the shading means nothing. */}
-              <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-fg-subtle)]">
-                <span className="tabular">{fmtValue(minValue)}</span>
-                <span className="flex h-3 w-16 overflow-hidden rounded-sm border border-[var(--color-border)]">
-                  {[0, 0.25, 0.5, 0.75, 1].map((t) => (
-                    <span
-                      key={t}
-                      className="flex-1"
-                      style={{ background: SERIES.solar, opacity: 0.14 + 0.72 * t }}
-                    />
-                  ))}
-                </span>
-                <span className="tabular">{fmtValue(maxValue)}</span>
-              </div>
+              {/* Anchored to this scenario's own min and max, so the ends
+                  have to be printed or the shading means nothing. */}
+              <ChoroplethLegend
+                hue={SERIES.solar}
+                low={fmtValue(minValue)}
+                high={fmtValue(maxValue)}
+              />
+
             </div>
           </div>
         </CardHeader>

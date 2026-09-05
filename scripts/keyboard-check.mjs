@@ -210,6 +210,36 @@ const browser = await chromium.launch({ executablePath: CHROME });
       `${moved.from} → focus ${moved.to}, selected ${moved.pressed}`,
     );
 
+    /*
+     * Home and End, checked on both maps rather than on each map's own terms.
+     *
+     * This is the gap that let the two roving-tabindex implementations drift:
+     * the nationwide map supported Home and End, the amphoe map did not, and
+     * a check that verified each separately had nothing to say about it. They
+     * share one hook now, and this is what keeps them sharing it.
+     */
+    const ends = await page.evaluate(async () => {
+      const gs = [...document.querySelectorAll("svg [data-iso]")];
+      const press = async (key) => {
+        document
+          .querySelector('[data-iso][tabindex="0"]')
+          ?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+        await new Promise((r) => setTimeout(r, 200));
+        return document.querySelector('[data-iso][tabindex="0"]')?.getAttribute("data-iso");
+      };
+      return {
+        first: gs[0]?.getAttribute("data-iso"),
+        last: gs.at(-1)?.getAttribute("data-iso"),
+        afterHome: await press("Home"),
+        afterEnd: await press("End"),
+      };
+    });
+    check(
+      "Home and End jump to the ends",
+      ends.afterHome === ends.first && ends.afterEnd === ends.last,
+      `Home → ${ends.afterHome} (first ${ends.first}) · End → ${ends.afterEnd} (last ${ends.last})`,
+    );
+
     // One level deeper: the amphoe view has its own map, its own buttons and
     // its own roving tabindex, all written separately from the one above.
     const drilled = await page.evaluate(() => {
@@ -254,6 +284,30 @@ const browser = await chromium.launch({ executablePath: CHROME });
       "arrows work at this level as well",
       amphoe.to !== amphoe.from,
       `${amphoe.from} → ${amphoe.to}`,
+    );
+    const amphoeEnds = await page.evaluate(async () => {
+      const gs = [...document.querySelectorAll("svg [data-amphoe]")];
+      const press = async (key) => {
+        document
+          .querySelector('[data-amphoe][tabindex="0"]')
+          ?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+        await new Promise((r) => setTimeout(r, 200));
+        return document
+          .querySelector('[data-amphoe][tabindex="0"]')
+          ?.getAttribute("data-amphoe");
+      };
+      return {
+        first: gs[0]?.getAttribute("data-amphoe"),
+        last: gs.at(-1)?.getAttribute("data-amphoe"),
+        afterHome: await press("Home"),
+        afterEnd: await press("End"),
+      };
+    });
+    check(
+      "and Home and End too, the same as the map above",
+      amphoeEnds.afterHome === amphoeEnds.first &&
+        amphoeEnds.afterEnd === amphoeEnds.last,
+      `Home → ${amphoeEnds.afterHome} · End → ${amphoeEnds.afterEnd}`,
     );
     check("there is a way back out", amphoe.back, "");
   }

@@ -3,10 +3,13 @@ import { Badge } from "@/components/ui/Badge";
 import { StatCard } from "@/components/ui/StatCard";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { SERIES } from "@/lib/chartTheme";
+import { ramp } from "@/lib/choropleth";
+import { ChoroplethLegend } from "@/components/ui/ChoroplethLegend";
 import { loadAmphoe } from "@/data/geo/provinces";
 import type { AmphoeGeo, ProvinceGeo } from "@/data/geo/types";
 import { PROVINCE_ELECTRICITY } from "@/data/geo/electricity";
 import { PHETCHABURI_ISO } from "@/data/constants";
+import { useRovingFocus } from "@/lib/useRovingFocus";
 
 /**
  * One province, drawn from its own amphoe.
@@ -30,11 +33,6 @@ const METRICS: { value: Metric; label: string }[] = [
 ];
 
 const elecOf = new Map(PROVINCE_ELECTRICITY.map((r) => [r.iso, r]));
-
-function ramp(value: number, min: number, max: number): number {
-  const t = max - min < 1e-9 ? 0.5 : (value - min) / (max - min);
-  return 0.12 + 0.76 * t;
-}
 
 export function AmphoeMap({
   province,
@@ -60,8 +58,6 @@ export function AmphoeMap({
   const [metric, setMetric] = useState<Metric>("protected");
   const [selected, setSelected] = useState<string | null>(null);
 
-  const svgRef = useRef<SVGSVGElement>(null);
-  const moveFocus = useRef(false);
 
   // No state resetting here: the caller keys this component on the province,
   // so switching province remounts it and every piece of state starts fresh.
@@ -85,11 +81,15 @@ export function AmphoeMap({
     };
   }, [province.iso]);
 
-  useEffect(() => {
-    if (!moveFocus.current || !selected) return;
-    moveFocus.current = false;
-    svgRef.current?.querySelector<SVGGElement>(`[data-amphoe="${selected}"]`)?.focus();
-  }, [selected]);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const roving = useRovingFocus({
+    items: amphoe ?? [],
+    selected,
+    onSelect: setSelected,
+    attribute: "data-amphoe",
+    key: (a) => a.id,
+    container: svgRef,
+  });
 
   const valueOf = useMemo(
     () => (a: AmphoeGeo) =>
@@ -136,7 +136,7 @@ export function AmphoeMap({
     );
     ro.observe(el);
     return () => ro.disconnect();
-  }, [amphoe]);
+  }, [amphoe, svgRef]);
 
   const span = Math.max(x1 - x0, y1 - y0);
   const viewW = x1 - x0 + pad * 2;
@@ -188,22 +188,12 @@ export function AmphoeMap({
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <SegmentedControl value={metric} onChange={setMetric} options={METRICS} />
-          <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-fg-subtle)]">
-            <span className="tabular">{fmt(min)}</span>
-            <span className="flex h-3 w-14 overflow-hidden rounded-sm border border-[var(--color-border)]">
-              {[0, 0.33, 0.66, 1].map((t) => (
-                <span
-                  key={t}
-                  className="flex-1"
-                  style={{
-                    background: metric === "protected" ? SERIES.emerald : SERIES.solar,
-                    opacity: 0.12 + 0.76 * t,
-                  }}
-                />
-              ))}
-            </span>
-            <span className="tabular">{fmt(max)}</span>
-          </div>
+          <ChoroplethLegend
+            hue={metric === "protected" ? SERIES.emerald : SERIES.solar}
+            low={fmt(min)}
+            high={fmt(max)}
+          />
+
         </div>
       </div>
 
@@ -236,32 +226,13 @@ export function AmphoeMap({
                   <g
                     key={a.id}
                     role="button"
-                    // One roving stop for the map, as on the country view.
-                    tabIndex={isSel || (!selected && idx === 0) ? 0 : -1}
+                    tabIndex={roving.isTabStop(idx) ? 0 : -1}
                     aria-pressed={isSel}
                     aria-label={`${a.th} ${a.en} ${a.km2.toLocaleString()} ตารางกิโลเมตร พื้นที่อนุรักษ์ ${((protOf.get(a.id)?.protectedFrac ?? 0) * 100).toFixed(0)} เปอร์เซ็นต์`}
                     data-amphoe={a.id}
                     className="cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-emerald-glow)]"
                     onClick={() => setSelected(a.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelected(a.id);
-                        return;
-                      }
-                      const step =
-                        e.key === "ArrowRight" || e.key === "ArrowDown"
-                          ? 1
-                          : e.key === "ArrowLeft" || e.key === "ArrowUp"
-                            ? -1
-                            : 0;
-                      if (!step) return;
-                      e.preventDefault();
-                      moveFocus.current = true;
-                      setSelected(
-                        amphoe[(idx + step + amphoe.length) % amphoe.length].id,
-                      );
-                    }}
+                    onKeyDown={(e) => roving.onKeyDown(e, idx)}
                   >
                     <path
                       d={a.path}
