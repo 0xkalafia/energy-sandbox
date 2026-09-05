@@ -89,6 +89,21 @@ const VARIANTS = {
       slug: "amphoe",
       settle: 1600,
     },
+    {
+      // Zoomed in far enough that the map swaps province outlines for amphoe
+      // boundaries. A different render with four times the geometry, plus the
+      // overlaid controls and the zoom readout, which have their own room to
+      // collide on a phone.
+      open: [
+        "ทั้งประเทศ 77 จังหวัด",
+        '[aria-label="ซูมเข้า"]',
+        '[aria-label="ซูมเข้า"]',
+        '[aria-label="ซูมเข้า"]',
+      ],
+      back: ['[aria-label="กลับไปเห็นทั้งประเทศ"]', "เพชรบุรี 8 อำเภอ"],
+      slug: "zoomed",
+      settle: 1200,
+    },
   ],
 };
 
@@ -421,13 +436,17 @@ for (const device of DEVICES) {
        * 390px phone — was never rendered. A pass that reports on a view it did
        * not open is worse than no pass at all.
        */
+      // A step is either button text or, for controls that carry only an
+      // accessible name, a CSS selector.
       const clickByText = (text) =>
         page.evaluate((t) => {
-          const b = [...document.querySelectorAll("button")].find((x) =>
-            x.textContent.includes(t),
-          );
-          b?.click();
-          return Boolean(b);
+          const el = t.startsWith("[")
+            ? document.querySelector(t)
+            : [...document.querySelectorAll("button")].find((x) =>
+                x.textContent.includes(t),
+              );
+          el?.click();
+          return Boolean(el);
         }, text);
 
       for (const variant of (VARIANTS[name] ?? [])) {

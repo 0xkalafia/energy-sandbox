@@ -142,6 +142,26 @@ report(
   })),
 );
 
+// Zoomed in, the map swaps province outlines for amphoe boundaries: four
+// times the geometry at four times the detail, and the state most likely to
+// go slow. Zoom itself is measured too, since each step re-tests which
+// provinces are on screen and may start a fetch.
+report("zoom in one step", await median("zoomin", () => ({ sel: '[aria-label="ซูมเข้า"]' })), "");
+await page.waitForTimeout(2500);
+const zoomed = await page.evaluate(() => ({
+  paths: document.querySelectorAll('svg[role="group"] g[data-iso] path').length,
+  zoom: (document.body.innerText.match(/([\d.]+)x/) ?? [])[1],
+}));
+console.log(`      ${zoomed.paths} paths at ${zoomed.zoom}x`);
+report(
+  "switch metric while zoomed",
+  await median("metric-zoomed", (i) => ({
+    sel: `[data-metric="${i % labels.length}"]`,
+  })),
+);
+await page.click('[aria-label="กลับไปเห็นทั้งประเทศ"]');
+await page.waitForTimeout(700);
+
 console.log(`\n── the province map, for comparison ──`);
 await byText("เพชรบุรี 8 อำเภอ");
 await page.click('[data-perf="target"]');

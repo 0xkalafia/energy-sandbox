@@ -58,6 +58,26 @@ same coordinates rather than a second coordinate system. Amphoe geometry is
 split into 77 lazy chunks — one province is 13-45 kB — and the 931-row
 protected-area table loads with it rather than with the tab.
 
+The nationwide map pans and zooms: buttons, mouse drag, two-finger pan and
+pinch, and the wheel with ⌘/Ctrl held. The wheel needs the modifier because
+the map sits inside a scrolling page and would otherwise swallow the scroll
+every time the cursor crossed it; touch leaves one finger to the page for the
+same reason and answers to two.
+
+**Past 2.5x it draws amphoe instead of province outlines.** Not a flourish —
+province outlines carry vertices 2.62 km apart, which is 1.6px on the
+un-zoomed map and 6.6px at 4x, visibly polygonal. Amphoe boundaries are
+simplified 4.5x finer, and the two agree because a province outline *is* its
+amphoe with the internal borders dissolved. Only the provinces on screen are
+fetched: five at 4x is about 70 kB, against 1.2 MB for all of them.
+
+How the amphoe are shaded says what resolution the data really has.
+Electricity is collected per province and solar was sampled at six amphoe
+each, so for those every amphoe takes its province's colour and only the
+dividing lines are new — detail, not invented variation. Protected area is
+measured per amphoe, so there it shades per amphoe against its own 0-100%
+scale, and the legend changes to say so.
+
 The amphoe view says what it does not have instead of dividing a province
 figure by area and presenting the quotient as a measurement.
 

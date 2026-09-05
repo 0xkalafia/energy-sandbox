@@ -10,6 +10,9 @@ import { PROVINCE_RESOURCE } from "@/data/geo/attributes";
 import { PROVINCE_PROTECTED } from "@/data/geo/protected";
 import { PHETCHABURI_ISO } from "@/data/constants";
 import { AmphoeMap } from "@/components/AmphoeMap";
+import { useMapZoom } from "@/lib/useMapZoom";
+import { loadAmphoe } from "@/data/geo/provinces";
+import type { AmphoeGeo } from "@/data/geo/types";
 
 /**
  * The whole country, on the same measurements the Phetchaburi model runs on.
@@ -123,9 +126,95 @@ export function ThailandMap() {
   const [zoomed, setZoomed] = useState<string | null>(null);
   const metric = METRICS.find((m) => m.id === metricId)!;
 
-  const svgRef = useRef<SVGSVGElement>(null);
   /** Set only by arrow navigation, so a mouse click never steals focus. */
   const moveFocus = useRef(false);
+
+  const { view, zoom, svgRef, zoomBy, reset, wasDrag, handlers } = useMapZoom({
+    full: { x: 0, y: 0, w: GEO_VIEWBOX.width, h: GEO_VIEWBOX.height },
+    maxZoom: 20,
+  });
+
+  /**
+   * Past this, province outlines stop being good enough.
+   *
+   * Measured: their vertices sit 2.62 km apart, which is 1.6px on the
+   * un-zoomed map and 6.6px at 4x — visibly polygonal. Amphoe boundaries are
+   * simplified 4.5x finer, and drawing them gives both a better edge and the
+   * districts themselves, so the swap does double duty. The shapes agree: a
+   * province outline is its own amphoe with the internal borders dissolved.
+   */
+  const DETAIL_ZOOM = 2.5;
+  const detailed = zoom >= DETAIL_ZOOM;
+
+  /**
+   * Per-amphoe protected fractions, 94 kB, fetched only when the protected
+   * layer is drawn at a zoom that shows amphoe. Every other metric is
+   * province-level and never needs it.
+   */
+  const [amphoeProtOf, setAmphoeProtOf] = useState<Map<string, number>>(
+    () => new Map(),
+  );
+
+  /** Amphoe geometry for provinces currently on screen, loaded on demand. */
+  const [amphoeByIso, setAmphoeByIso] = useState<Map<string, AmphoeGeo[]>>(
+    () => new Map(),
+  );
+  const requested = useRef(new Set<string>());
+
+  const visible = useMemo(() => {
+    if (!detailed) return [];
+    return PROVINCES.filter(
+      (p) =>
+        p.bbox[0] < view.x + view.w &&
+        p.bbox[2] > view.x &&
+        p.bbox[1] < view.y + view.h &&
+        p.bbox[3] > view.y,
+    ).map((p) => p.iso);
+  }, [detailed, view]);
+
+  useEffect(() => {
+    // Only what is on screen: all 77 would be 1.2 MB, five provinces is 70 kB.
+    const missing = visible.filter((iso) => !requested.current.has(iso));
+    if (!missing.length) return;
+    for (const iso of missing) requested.current.add(iso);
+    Promise.all(
+      missing.map((iso) =>
+        loadAmphoe(iso).then(
+          (list) => [iso, list] as const,
+          () => {
+            // Let it be retried rather than leaving the province permanently
+            // stuck on its coarse outline.
+            requested.current.delete(iso);
+            return null;
+          },
+        ),
+      ),
+    ).then((loaded) => {
+      const ok = loaded.filter(Boolean) as (readonly [string, AmphoeGeo[]])[];
+      if (ok.length) {
+        setAmphoeByIso((prev) => {
+          const next = new Map(prev);
+          for (const [iso, list] of ok) next.set(iso, list);
+          return next;
+        });
+      }
+    });
+  }, [visible]);
+
+  const wantAmphoeShading = detailed && metricId === "protected";
+  useEffect(() => {
+    if (!wantAmphoeShading || amphoeProtOf.size) return;
+    let live = true;
+    import("@/data/geo/protectedAmphoe").then((m) => {
+      if (live)
+        setAmphoeProtOf(
+          new Map(m.AMPHOE_PROTECTED.map((a) => [a.id, a.protectedFrac])),
+        );
+    });
+    return () => {
+      live = false;
+    };
+  }, [wantAmphoeShading, amphoeProtOf.size]);
 
   useEffect(() => {
     if (!moveFocus.current) return;
@@ -133,7 +222,7 @@ export function ThailandMap() {
     svgRef.current
       ?.querySelector<SVGGElement>(`[data-iso="${selected}"]`)
       ?.focus();
-  }, [selected]);
+  }, [selected, svgRef]);
 
   const { scaled, min, max, missing } = useMemo(() => {
     const raw = PROVINCES.map((p) => ({ iso: p.iso, v: metric.value(p.iso) }));
@@ -207,7 +296,9 @@ export function ThailandMap() {
                   or the shading means nothing. */}
               <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-fg-subtle)]">
                 <span className="tabular">
-                  {metric.format(ranked[ranked.length - 1]?.v ?? 0)}
+                  {wantAmphoeShading
+                    ? "0%"
+                    : metric.format(ranked[ranked.length - 1]?.v ?? 0)}
                 </span>
                 <span className="flex h-3 w-16 overflow-hidden rounded-sm border border-[var(--color-border)]">
                   {[0, 0.25, 0.5, 0.75, 1].map((t) => (
@@ -218,7 +309,11 @@ export function ThailandMap() {
                     />
                   ))}
                 </span>
-                <span className="tabular">{metric.format(ranked[0]?.v ?? 0)}</span>
+                {/* The scale changes under the amphoe layer, so the legend
+                    has to change with it or it describes a different map. */}
+                <span className="tabular">
+                  {wantAmphoeShading ? "100% รายอำเภอ" : metric.format(ranked[0]?.v ?? 0)}
+                </span>
                 {NEEDS_LOG.has(metric.id) && <span className="ml-1">(log)</span>}
               </div>
             </div>
@@ -227,10 +322,53 @@ export function ThailandMap() {
         <CardContent>
           <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
             <div className="relative overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]">
+              {/* Controls sit over the map rather than beside it: they belong
+                  to it, and a phone has no width to spare for a column of
+                  buttons. Real buttons, so they are tabbable and announced —
+                  the drag and pinch below them are not reachable any other
+                  way. */}
+              <div className="absolute right-2 top-2 z-10 flex flex-col gap-1">
+                <button
+                  onClick={() => zoomBy(1.6)}
+                  disabled={zoom >= 19.9}
+                  aria-label="ซูมเข้า"
+                  className="h-7 w-7 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)]/90 text-sm text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] disabled:opacity-40 pointer-coarse:h-9 pointer-coarse:w-9"
+                >
+                  +
+                </button>
+                <button
+                  onClick={() => zoomBy(1 / 1.6)}
+                  disabled={zoom <= 1.001}
+                  aria-label="ซูมออก"
+                  className="h-7 w-7 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)]/90 text-sm text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] disabled:opacity-40 pointer-coarse:h-9 pointer-coarse:w-9"
+                >
+                  −
+                </button>
+                <button
+                  onClick={reset}
+                  disabled={zoom <= 1.001}
+                  aria-label="กลับไปเห็นทั้งประเทศ"
+                  title="ทั้งประเทศ"
+                  className="h-7 w-7 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)]/90 text-[10px] text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-hover)] disabled:opacity-40 pointer-coarse:h-9 pointer-coarse:w-9"
+                >
+                  ⤢
+                </button>
+              </div>
+              {zoom > 1.001 && (
+                <div className="pointer-events-none absolute bottom-2 left-2 z-10 rounded-md bg-[var(--color-bg)]/85 px-2 py-1 text-[10px] text-[var(--color-fg-subtle)]">
+                  {zoom.toFixed(1)}x
+                  {detailed && " · เส้นอำเภอ"}
+                </div>
+              )}
               <svg
                 ref={svgRef}
-                viewBox={`0 0 ${GEO_VIEWBOX.width} ${GEO_VIEWBOX.height}`}
-                className="mx-auto h-full max-h-[620px] w-full"
+                viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
+                {...handlers}
+                // pan-y, not none: one finger keeps scrolling the page, which
+                // matters because on a phone this map fills the column and
+                // would otherwise trap the scroll. Two fingers pan and pinch.
+                style={{ touchAction: "pan-y" }}
+                className="mx-auto h-full max-h-[620px] w-full cursor-grab active:cursor-grabbing"
                 // Not role="img": every province in here is a button, and
                 // role="img" promises no interactive descendants.
                 role="group"
@@ -258,7 +396,12 @@ export function ThailandMap() {
                       }`}
                       aria-pressed={isSel}
                       className="cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-emerald-glow)]"
-                      onClick={() => setSelected(p.iso)}
+                      onClick={() => {
+                        // A drag that ends over a province is panning, not
+                        // picking one.
+                        if (wasDrag()) return;
+                        setSelected(p.iso);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
@@ -303,20 +446,92 @@ export function ThailandMap() {
                           touching nothing at all: re-shading all 77 costs less
                           than one frame). The reading that suggested otherwise
                           came from a hidden tab, which does not rasterise. */}
-                      <path
-                        d={p.outline}
-                        fill={s == null ? "var(--color-bg-hover)" : metric.hue}
-                        fillOpacity={s == null ? 1 : ramp(s, min, max)}
-                        stroke={
-                          isSel
-                            ? "var(--color-fg)"
-                            : isHome
-                              ? "var(--color-emerald-glow)"
-                              : "var(--color-border-strong)"
+                      {(() => {
+                        const outer = isSel
+                          ? "var(--color-fg)"
+                          : isHome
+                            ? "var(--color-emerald-glow)"
+                            : "var(--color-border-strong)";
+                        // Strokes are in user units, so they have to shrink as
+                        // the viewBox does or a border becomes a slab at 8x.
+                        //
+                        // The province edge also has to get heavier once
+                        // amphoe lines appear underneath it. At the same 0.8
+                        // it used at 1x it was indistinguishable from them,
+                        // and the map lost any sense of where one province
+                        // ended — visible immediately in a screenshot, and
+                        // not in any of the numbers.
+                        const base = detailed ? 2.2 : 0.8;
+                        const w = (isSel ? 5 : isHome ? 3 : base) / zoom;
+                        const parts = amphoeByIso.get(p.iso);
+
+                        if (!detailed || !parts) {
+                          return (
+                            <path
+                              d={p.outline}
+                              fill={s == null ? "var(--color-bg-hover)" : metric.hue}
+                              fillOpacity={s == null ? 1 : ramp(s, min, max)}
+                              stroke={outer}
+                              strokeWidth={w}
+                              strokeLinejoin="round"
+                            />
+                          );
                         }
-                        strokeWidth={isSel ? 5 : isHome ? 3 : 0.8}
-                        strokeLinejoin="round"
-                      />
+
+                        /*
+                         * Zoomed in far enough to draw the amphoe.
+                         *
+                         * How they are shaded says what resolution the data
+                         * really has. Electricity is collected per province
+                         * and solar was sampled at six amphoe each, so for
+                         * those the amphoe all take their province's colour
+                         * and only the dividing lines are new — the map gains
+                         * detail, not invented variation. Protected area is
+                         * measured per amphoe, so there it shades per amphoe
+                         * and the difference is real: Kaeng Krachan at 77%
+                         * against neighbours at nothing.
+                         */
+                        const perAmphoe = metric.id === "protected";
+                        // Province shares top out at 53%; a single amphoe can
+                        // be 100%, so shading it against the province range
+                        // would peg half the country at full darkness.
+                        return (
+                          <>
+                            {parts.map((a) => {
+                              const av = perAmphoe
+                                ? (amphoeProtOf.get(a.id) ?? null)
+                                : null;
+                              return (
+                                <path
+                                  key={a.id}
+                                  d={a.path}
+                                  fill={s == null ? "var(--color-bg-hover)" : metric.hue}
+                                  fillOpacity={
+                                    perAmphoe && av != null
+                                      ? ramp(av, 0, 1)
+                                      : s == null
+                                        ? 1
+                                        : ramp(s, min, max)
+                                  }
+                                  stroke="var(--color-border-strong)"
+                                  strokeWidth={0.5 / zoom}
+                                  strokeLinejoin="round"
+                                />
+                              );
+                            })}
+                            {/* The province edge on top, so it still reads as
+                                one unit and the selected one still stands
+                                out. */}
+                            <path
+                              d={p.outline}
+                              fill="none"
+                              stroke={outer}
+                              strokeWidth={w}
+                              strokeLinejoin="round"
+                            />
+                          </>
+                        );
+                      })()}
                     </g>
                   );
                 })}
